@@ -36,24 +36,38 @@ class SimpleSwitch(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
+        self.set_port_forwarding = False
 
     def change_ssh_port(self, datapath):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        match = parser.OFPMatch(eth_type=0x0800, ip_proto=6, nw_src="10.0.0.10", tcp_src=24)
-        actions = [datapath.ofproto_parser.OFPActionSetTpSrc(22)]
+        match = parser.OFPMatch(in_port=3, dl_type=0x0800, nw_proto=6, nw_dst="10.0.0.10", nw_src="10.0.0.20",
+                                tp_dst=24)
+        actions = [datapath.ofproto_parser.OFPActionSetTpDst(22), datapath.ofproto_parser.OFPActionOutput(1)]
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=ofproto.OFP_DEFAULT_PRIORITY,
+            priority=65534,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+        datapath.send_msg(mod)
+
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(in_port=1, dl_type=0x0800, nw_proto=6, nw_src="10.0.0.10", nw_dst="10.0.0.20",
+                                tp_src=22)
+        actions = [datapath.ofproto_parser.OFPActionSetTpSrc(24), datapath.ofproto_parser.OFPActionOutput(3)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534,
             flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
         datapath.send_msg(mod)
 
 
-    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    def switch_features_handler(self, ev):
-        datapath = ev.msg.datapath
-        self.change_ssh_port(datapath)
+    #@set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    #def switch_features_handler(self, ev):
+    #    datapath = ev.msg.datapath
+    #    self.change_ssh_port(datapath)
 
 
     def add_flow(self, datapath, in_port, dst, src, actions):
@@ -116,6 +130,10 @@ class SimpleSwitch(app_manager.RyuApp):
             datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
             actions=actions, data=data)
         datapath.send_msg(out)
+
+        if not self.set_port_forwarding:
+            self.change_ssh_port(datapath)
+            self.set_port_forwarding = True
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def _port_status_handler(self, ev):
