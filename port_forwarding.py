@@ -64,10 +64,10 @@ class SimpleSwitch(app_manager.RyuApp):
         datapath.send_msg(mod)
 
 
-    #@set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    #def switch_features_handler(self, ev):
-    #    datapath = ev.msg.datapath
-    #    self.change_ssh_port(datapath)
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    def switch_features_handler(self, ev):
+       datapath = ev.msg.datapath
+       self.change_ssh_port(datapath)
 
 
     def add_flow(self, datapath, in_port, dst, src, actions):
@@ -131,9 +131,6 @@ class SimpleSwitch(app_manager.RyuApp):
             actions=actions, data=data)
         datapath.send_msg(out)
 
-        if not self.set_port_forwarding:
-            self.change_ssh_port(datapath)
-            self.set_port_forwarding = True
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def _port_status_handler(self, ev):
