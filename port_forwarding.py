@@ -20,7 +20,7 @@ class SimpleSwitch(app_manager.RyuApp):
 
     def change_ssh_port(self, datapath):
         ofproto = datapath.ofproto
-        parser = datapath.ofproto_parserfrom
+        parser = datapath.ofproto_parser
         # match tcp packet from 10.0.0.10 to 10.0.0.20 with dst_port 24
         match = parser.OFPMatch(in_port=3, dl_type=0x0800, nw_proto=6, nw_dst="10.0.0.10", nw_src="10.0.0.20",
                                 tp_dst=24)

@@ -39,11 +39,39 @@ class SimpleSwitch(app_manager.RyuApp):
         self.set_port_forwarding = False
 
 
+    def change_ssh_port(self, datapath):
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        # match tcp packet from 10.0.0.10 to 10.0.0.20 with dst_port 24
+        match = parser.OFPMatch(in_port=3, dl_type=0x0800, nw_proto=6, nw_dst="10.0.0.10", nw_src="10.0.0.20",
+                                tp_dst=24)
+        # change the the dst_port of matched tcp packets to 22 and output to switch 1
+        actions = [datapath.ofproto_parser.OFPActionSetTpDst(22), datapath.ofproto_parser.OFPActionOutput(1)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+        datapath.send_msg(mod)
+
+        # rules for the reverse direction
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(in_port=1, dl_type=0x0800, nw_proto=6, nw_src="10.0.0.10", nw_dst="10.0.0.20",
+                                tp_src=22)
+        actions = [datapath.ofproto_parser.OFPActionSetTpSrc(24), datapath.ofproto_parser.OFPActionOutput(3)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+        datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         print(ev.msg)
+        self.change_ssh_port(datapath)
 
 
 
