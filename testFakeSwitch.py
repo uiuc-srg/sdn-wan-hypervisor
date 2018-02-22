@@ -37,10 +37,13 @@ from ryu.ofproto import ofproto_v1_0 as ofproto_v1
 from ryu.ofproto import ofproto_common
 from ryu.ofproto import ofproto_parser
 from ryu.ofproto import ofproto_v1_0_parser as ofproto_v1_parser
+from app import app
+import thread
+import time
 
 
-# OFP_HEADER_PACK_STR = '!BBHI'
-# OFP_SWITCH_FEATURES_PACK_STR = '!QIB3xII'
+def flaskThread():
+    app.run("127.0.0.1", port=5678, debug=False)
 
 
 class SimpleSwitch(app_manager.RyuApp):
@@ -50,8 +53,8 @@ class SimpleSwitch(app_manager.RyuApp):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.set_port_forwarding = False
-        # self.helo_msg = ''
-        # self.config_msg = ''
+        app.debug = False
+        thread.start_new_thread(flaskThread, ())
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -64,6 +67,9 @@ class SimpleSwitch(app_manager.RyuApp):
         msg.serialize()
         # send hello
         s.send(msg.buf)
+
+        time.sleep(20)
+
         hello_from_switch = s.recv(20)
         # print hello_from_switch
 
@@ -76,12 +82,14 @@ class SimpleSwitch(app_manager.RyuApp):
 
         # A msg for the match action is
         # |header 8|match 40|flowMod 72|action [set port OFP_ACTION_TP_PORT_PACK_STR 8] [OFP_ACTION_OUTPUT_PACK_STR 8]|
+        port_offset = app.get_port_return()
+        print(port_offset)
 
         buf = self._recv_loop()
         (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
         mod = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
         print("flow tp dst:", mod.match.tp_dst)
-        mod.match.tp_dst += 2
+        mod.match.tp_dst += port_offset
         print("flow new tp dst:", mod.match.tp_dst)
         datapath.send_msg(mod)
 
@@ -105,7 +113,7 @@ class SimpleSwitch(app_manager.RyuApp):
         (version, msg_type, msg_len, xid) = ofproto_parser.header(buf2)
         mod2 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf2)
         print("flow tp src:", mod2.actions[0].tp)
-        mod2.actions[0].tp += 2
+        mod2.actions[0].tp += port_offset
         print("flow new tp src:", mod2.actions[0].tp)
         datapath.send_msg(mod2)
         print(mod2)
