@@ -40,10 +40,97 @@ from ryu.ofproto import ofproto_v1_0_parser as ofproto_v1_parser
 from app import app
 import thread
 import time
+from socket import error as socket_error
+import errno
 
 
 def flaskThread():
     app.run("127.0.0.1", port=5678, debug=False)
+
+
+def recv_loop(socket):
+    buf = bytearray()
+    min_read_len = remaining_read_len = ofproto_common.OFP_HEADER_SIZE
+
+    while True:
+        read_len = min_read_len
+        if remaining_read_len > min_read_len:
+            read_len = remaining_read_len
+        ret = socket.recv(read_len)
+
+        if len(ret) == 0:
+            return
+
+        buf += ret
+        buf_len = len(buf)
+        while buf_len >= min_read_len:
+            (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
+            print(version, msg_type, msg_len, xid)
+            if (msg_len < min_read_len):
+                # Someone isn't playing nicely; log it, and try something sane.
+                msg_len = min_read_len
+            if buf_len < msg_len:
+                remaining_read_len = (msg_len - buf_len)
+                break
+            return buf
+
+
+def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
+    s = 0
+
+    while True:
+        try:
+            s = connectionTest.connect_to_ip('localhost', 7891)
+            break
+        except socket_error as serr:
+            if serr.errno == errno.ECONNREFUSED:
+                continue
+
+    switch_obj.socket = s
+    # send hello
+    hello_msg.serialize()
+    s.send(hello_msg.buf)
+
+    hello_from_switch = recv_loop(s)
+    print(hello_from_switch)
+
+    # config stage
+    config_msg = pack(ofproto_v1.OFP_HEADER_PACK_STR, 0x1, 0x6, 32, switch_config_msg.xid)
+    config_msg += pack(ofproto_v1.OFP_SWITCH_FEATURES_PACK_STR, switch_config_msg.datapath_id, switch_config_msg.n_buffers, switch_config_msg.n_tables,
+                       switch_config_msg.capabilities, switch_config_msg.actions)
+    s.send(config_msg)
+
+    # A msg for the match action is
+    # |header 8|match 40|flowMod 72|action [set port OFP_ACTION_TP_PORT_PACK_STR 8] [OFP_ACTION_OUTPUT_PACK_STR 8]|
+    port_offset = app.get_port_return()
+    print(port_offset)
+
+    # TODO: LOOK INTO WHY SWITCH CONFIG MESSAGE IS RECEIVED TWICE SOMETIMES
+    version, msg_type, msg_len, xid = 0, 0, 0, 0
+    while msg_type != 14:
+        buf = recv_loop(s)
+        (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
+
+    print("RECEIVED MSG TYPE", msg_type)
+    mod = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
+    print("flow tp dst:", mod.match.tp_dst)
+    mod.match.tp_dst += port_offset
+    print("flow new tp dst:", mod.match.tp_dst)
+    datapath.send_msg(mod)
+
+    buf2 = recv_loop(s)
+    (version, msg_type, msg_len, xid) = ofproto_parser.header(buf2)
+    mod2 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf2)
+    print("flow tp src:", mod2.actions[0].tp)
+    mod2.actions[0].tp += port_offset
+    print("flow new tp src:", mod2.actions[0].tp)
+    datapath.send_msg(mod2)
+    print(mod2)
+
+    buf3 = recv_loop(s)
+    (version, msg_type, msg_len, xid) = ofproto_parser.header(buf3)
+    mod3 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf3)
+    print(mod3)
 
 
 class SimpleSwitch(app_manager.RyuApp):
@@ -61,90 +148,85 @@ class SimpleSwitch(app_manager.RyuApp):
         datapath = ev.msg.datapath
         self.config_msg = ev.msg
         # tries to connect to 7891
-        s = connectionTest.connect_to_ip('localhost', 7891)
-        self.socket = s
-        msg = self.helo_msg
-        msg.serialize()
-        # send hello
-        s.send(msg.buf)
+        thread.start_new_thread(fake_switch_thread, (datapath, self.helo_msg, ev.msg, self))
 
-        time.sleep(20)
-
-        hello_from_switch = s.recv(20)
-        # print hello_from_switch
-
-        # config stage
-        msg = ev.msg
-        config_msg = pack(ofproto_v1.OFP_HEADER_PACK_STR, 0x1, 0x6, 32, msg.xid)
-        config_msg += pack(ofproto_v1.OFP_SWITCH_FEATURES_PACK_STR, msg.datapath_id, msg.n_buffers, msg.n_tables,
-                      msg.capabilities, msg.actions)
-        s.send(config_msg)
-
-        # A msg for the match action is
-        # |header 8|match 40|flowMod 72|action [set port OFP_ACTION_TP_PORT_PACK_STR 8] [OFP_ACTION_OUTPUT_PACK_STR 8]|
-        port_offset = app.get_port_return()
-        print(port_offset)
-
-        buf = self._recv_loop()
-        (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
-        mod = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
-        print("flow tp dst:", mod.match.tp_dst)
-        mod.match.tp_dst += port_offset
-        print("flow new tp dst:", mod.match.tp_dst)
-        datapath.send_msg(mod)
-
-
-        # (wildcards, in_port, dl_src,
-        #  dl_dst, dl_vlan, dl_vlan_pcp,
-        #  dl_type, nw_tos, nw_proto,
-        #  nw_src, nw_dst, tp_src, tp_dst) = unpack_from(ofproto_v1.OFP_MATCH_PACK_STR,
-        #                                                buf, ofproto_v1.OFP_HEADER_SIZE)
+        # s = connectionTest.connect_to_ip('localhost', 7891)
+        # self.socket = s
+        # msg = self.helo_msg
+        # msg.serialize()
+        # # send hello
+        # s.send(msg.buf)
         #
-        # match = ofproto_v1_parser.OFPMatch.parse(buf, ofproto_v1.OFP_HEADER_SIZE)
-        # print(in_port, dl_type, nw_proto, nw_dst, nw_src, tp_dst)
+        # time.sleep(20)
         #
-        # (cookie, command,
-        # idle_timeout, hard_timeout,
-        # priority, buffer_id, out_port,
-        # flags) = unpack_from(ofproto_v1.OFP_FLOW_MOD_PACK_STR0,
-        #                                                buf, ofproto_v1.OFP_HEADER_SIZE + ofproto_v1.OFP_MATCH_SIZE)
-
-        buf2 = self._recv_loop()
-        (version, msg_type, msg_len, xid) = ofproto_parser.header(buf2)
-        mod2 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf2)
-        print("flow tp src:", mod2.actions[0].tp)
-        mod2.actions[0].tp += port_offset
-        print("flow new tp src:", mod2.actions[0].tp)
-        datapath.send_msg(mod2)
-        print(mod2)
-
-
-        buf3 = self._recv_loop()
-        (version, msg_type, msg_len, xid) = ofproto_parser.header(buf3)
-        mod3 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf3)
-        print(mod3)
-
-
-        # (wildcards, in_port, dl_src,
-        # dl_dst, dl_vlan, dl_vlan_pcp,
-        # dl_type, nw_tos, nw_proto,
-        # nw_src, nw_dst, tp_src, tp_dst) = unpack_from(ofproto_v1.OFP_MATCH_PACK_STR,
-        #                      buf, ofproto_v1.OFP_HEADER_SIZE)
-
-        # print(in_port, dl_type, nw_proto, str(nw_dst), str(nw_src), tp_dst)
-
-
-        # ev = self._recv_loop()
+        # hello_from_switch = s.recv(20)
+        # # print hello_from_switch
         #
-        # msg_buf = ev.msg.buf
-        # match = unpack_from(ofproto_v1.OFP_MATCH_PACK_STR,
-        #                     msg_buf, ofproto_v1.OFP_HEADER_SIZE)
-        # print(match)
-        # print(ev.msg.OFPMatch)
-
-
-        print "config_handler"
-
+        # # config stage
+        # msg = ev.msg
+        # config_msg = pack(ofproto_v1.OFP_HEADER_PACK_STR, 0x1, 0x6, 32, msg.xid)
+        # config_msg += pack(ofproto_v1.OFP_SWITCH_FEATURES_PACK_STR, msg.datapath_id, msg.n_buffers, msg.n_tables,
+        #               msg.capabilities, msg.actions)
+        # s.send(config_msg)
+        #
+        # # A msg for the match action is
+        # # |header 8|match 40|flowMod 72|action [set port OFP_ACTION_TP_PORT_PACK_STR 8] [OFP_ACTION_OUTPUT_PACK_STR 8]|
+        # port_offset = app.get_port_return()
+        # print(port_offset)
+        #
+        # buf = self._recv_loop()
+        # (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
+        # mod = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
+        # print("flow tp dst:", mod.match.tp_dst)
+        # mod.match.tp_dst += port_offset
+        # print("flow new tp dst:", mod.match.tp_dst)
+        # datapath.send_msg(mod)
+        #
+        # # (wildcards, in_port, dl_src,
+        # #  dl_dst, dl_vlan, dl_vlan_pcp,
+        # #  dl_type, nw_tos, nw_proto,
+        # #  nw_src, nw_dst, tp_src, tp_dst) = unpack_from(ofproto_v1.OFP_MATCH_PACK_STR,
+        # #                                                buf, ofproto_v1.OFP_HEADER_SIZE)
+        # #
+        # # match = ofproto_v1_parser.OFPMatch.parse(buf, ofproto_v1.OFP_HEADER_SIZE)
+        # # print(in_port, dl_type, nw_proto, nw_dst, nw_src, tp_dst)
+        # #
+        # # (cookie, command,
+        # # idle_timeout, hard_timeout,
+        # # priority, buffer_id, out_port,
+        # # flags) = unpack_from(ofproto_v1.OFP_FLOW_MOD_PACK_STR0,
+        # #                                                buf, ofproto_v1.OFP_HEADER_SIZE + ofproto_v1.OFP_MATCH_SIZE)
+        #
+        # buf2 = self._recv_loop()
+        # (version, msg_type, msg_len, xid) = ofproto_parser.header(buf2)
+        # mod2 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf2)
+        # print("flow tp src:", mod2.actions[0].tp)
+        # mod2.actions[0].tp += port_offset
+        # print("flow new tp src:", mod2.actions[0].tp)
+        # datapath.send_msg(mod2)
+        # print(mod2)
+        #
+        # buf3 = self._recv_loop()
+        # (version, msg_type, msg_len, xid) = ofproto_parser.header(buf3)
+        # mod3 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf3)
+        # print(mod3)
+        # print "config_handler finish"
+        #
+        # # (wildcards, in_port, dl_src,
+        # # dl_dst, dl_vlan, dl_vlan_pcp,
+        # # dl_type, nw_tos, nw_proto,
+        # # nw_src, nw_dst, tp_src, tp_dst) = unpack_from(ofproto_v1.OFP_MATCH_PACK_STR,
+        # #                      buf, ofproto_v1.OFP_HEADER_SIZE)
+        #
+        # # print(in_port, dl_type, nw_proto, str(nw_dst), str(nw_src), tp_dst)
+        #
+        # # ev = self._recv_loop()
+        # #
+        # # msg_buf = ev.msg.buf
+        # # match = unpack_from(ofproto_v1.OFP_MATCH_PACK_STR,
+        # #                     msg_buf, ofproto_v1.OFP_HEADER_SIZE)
+        # # print(match)
+        # # print(ev.msg.OFPMatch)
 
     @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)
     def hello_handler(self, ev):
