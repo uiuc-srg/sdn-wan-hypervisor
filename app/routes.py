@@ -11,6 +11,7 @@ def index():
     return "Hello, here is the sdn config api!"
 
 
+# TODO: TRIGER RULE CHANGING WHEN HITTED
 @app.route('/port/<offset>', methods=['PUT'])
 def define_port_incr(offset):
     port_offset_lock.acquire()
