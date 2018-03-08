@@ -22,56 +22,79 @@ class SimpleSwitch(app_manager.RyuApp):
     def set_vlan(self, datapath):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        match = parser.OFPMatch(in_port=5)
 
-        actions = [parser.OFPActionPushVlan(), parser.OFPActionSetField(vlan_vid=10)]
+        # add vlan tag for packets from inport 1
+        match = parser.OFPMatch(in_port=1)
+        actions = [parser.OFPActionPushVlan(), parser.OFPActionSetField(vlan_vid=(0x1000 | 3))]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(1)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        datapath.send_msg(mod)
+
+        # add vlan tag for packets from inport 3
+        match = parser.OFPMatch(in_port=3)
+        actions = [parser.OFPActionPushVlan(), parser.OFPActionSetField(vlan_vid=(0x1000 | 3))]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(1)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        datapath.send_msg(mod)
+
+        # strip off vlan tag and forward to port 1 and 3
+        match = parser.OFPMatch(vlan_vid=(0x1000 | 4099))
+        actions = [parser.OFPActionPopVlan(), parser.OFPActionOutput(1), parser.OFPActionOutput(3)]
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=65534,
+            priority=65534, table_id=1,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         datapath.send_msg(mod)
-        # print(mod)
+        print("sent vlan group 1")
 
-        match = parser.OFPMatch(vlan_vid=10)
-        # change the the dst_port of matched tcp packets to 22 and output to switch 1
-        # actions = [parser.OFPActionVlanVid(10), parser.OFPActionOutput(5)]
-        actions = [parser.OFPActionOutput(5), parser.OFPActionOutput(1), parser.OFPActionPopVlan()]
+        # vlan group 2
+        # add vlan tag for packets from inport 5
+        match = parser.OFPMatch(in_port=5)
+        actions = [parser.OFPActionPushVlan(), parser.OFPActionSetField(vlan_vid=(0x1000 | 2))]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(1)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        datapath.send_msg(mod)
+
+        # add vlan tag for packets from inport 7
+        match = parser.OFPMatch(in_port=7)
+        actions = [parser.OFPActionPushVlan(), parser.OFPActionSetField(vlan_vid=(0x1000 | 2))]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(1)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        datapath.send_msg(mod)
+
+        # strip off vlan tag and forward to port 5 and 7
+        match = parser.OFPMatch(vlan_vid=(0x1000 | 4098))
+        actions = [parser.OFPActionPopVlan(), parser.OFPActionOutput(5), parser.OFPActionOutput(7)]
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         mod = datapath.ofproto_parser.OFPFlowMod(
-            datapath=datapath, match=match, cookie=0, table_id=1,
+            datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=65534,
+            priority=65534, table_id=1,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         datapath.send_msg(mod)
-        # print(mod)
-
-        # match = parser.OFPMatch(dl_vlan=10)
-        # # change the the dst_port of matched tcp packets to 22 and output to switch 1
-        # actions = [parser.OFPActionOutput(1), parser.OFPActionOutput(5)]
-        # mod = datapath.ofproto_parser.OFPFlowMod(
-        #     datapath=datapath, match=match, cookie=0,
-        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-        #     priority=65534,
-        #     flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
-        # datapath.send_msg(mod)
-        # print(mod)
-
-        # match = parser.OFPMatch(in_port=3)
-        # # change the the dst_port of matched tcp packets to 22 and output to switch 1
-        # actions = [parser.OFPActionVlanVid(10)]
-        # mod = datapath.ofproto_parser.OFPFlowMod(
-        #     datapath=datapath, match=match, cookie=0,
-        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-        #     priority=65534,
-        #     flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
-        # datapath.send_msg(mod)
+        print("sent vlan group 2")
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
-        print(ev.msg)
         self.set_vlan(datapath)
 
     def add_flow(self, datapath, in_port, dst, src, actions):
@@ -94,19 +117,18 @@ class SimpleSwitch(app_manager.RyuApp):
         msg = ev.msg
         datapath = msg.datapath
         ofproto = datapath.ofproto
-
-        pkt = packet.Packet(msg.data)
-        eth = pkt.get_protocol(ethernet.ethernet)
-
-        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
-            # ignore lldp packet
-            return
-        dst = eth.dst
-        src = eth.src
-
+        parser = datapath.ofproto_parser
+        # get Datapath ID to identify OpenFlow switches.
         dpid = datapath.id
         self.mac_to_port.setdefault(dpid, {})
-        print msg
+        # analyse the received packets using the packet library.
+        pkt = packet.Packet(msg.data)
+        eth_pkt = pkt.get_protocol(ethernet.ethernet)
+        dst = eth_pkt.dst
+        src = eth_pkt.src
+        # get the received port number from packet_in message.
+        in_port = msg.match['in_port']
+        self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
         # self.logger.info("packet in %s %s %s %s", dpid, src, dst, msg.in_port)
 
