@@ -43,23 +43,27 @@ import thread
 from socket import error as socket_error
 import errno
 import os as os
+import startVPN as StartVPN
 
-from config import HypervisorConfig
 
 def flaskThread():
-    app.run("127.0.0.1", port=5678, debug=False)
+    app.run("0.0.0.0", port=5678, debug=False)
 
 
 def startServiceVPNChannel():
-    config = HypervisorConfig()
-    config.generateMainVPNServerConfig("hypervisorVPNServer1.sh")
-    os.system("ifconfig ovsbr0 10.0.2.1/24 up")
-    os.system("route -n")
-    os.system("sshpass -p 'zys' scp -o StrictHostKeyChecking=no hypervisorVPNServer1.sh root@10.0.2.10:~/")
-    os.system("sshpass -p 'zys' ssh -o StrictHostKeyChecking=no -t root@10.0.2.10 'sh /root/hypervisorVPNServer1.sh'")
-
+    # os.system("sshpass -p 'zys' scp -o StrictHostKeyChecking=no hypervisorVPNServer1.sh root@10.0.2.10:~/")
+    # os.system("sshpass -p 'zys' ssh -o StrictHostKeyChecking=no -t root@10.0.2.10 'sh /root/hypervisorVPNServer1.sh'")
+    keyDir = "/home/yuen/Desktop/openvpenca/keys"
+    keyName = "server2"
+    subNet = "10.0.200.0"
+    vpnserver = "10.0.1.11"
+    privatenets = "10.0.2.0,10.0.1.11"
+    vpnclients = "client1,10.0.200.5,10.0.0.0"
+    StartVPN.init_switch_ip("10.0.2.1", 24)
+    StartVPN.startServiceVPNServer("10.0.2.10:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
     os.system("route add -net 10.0.0.0 netmask 255.255.255.0 gw 10.0.2.10")
     os.system("route add -net 10.0.200.0 netmask 255.255.255.0 gw 10.0.2.10")
+
 
 
 

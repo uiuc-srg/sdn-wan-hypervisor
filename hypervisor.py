@@ -43,21 +43,21 @@ from app import app
 import thread
 from socket import error as socket_error
 import errno
-from config import HypervisorConfig
 import os as os
+import startVPN as startVPN
+
 
 def flaskThread():
-    app.run("127.0.0.1", port=5678, debug=False)
+    app.run("0.0.0.0", port=5678, debug=False)
 
 
 def startServiceVPNChannel():
-    config = HypervisorConfig()
-    config.generateMainVPNClientConfig("10.0.1.11", "hypervisorVPNClient1.sh")
-    os.system("ifconfig ovsbr0 10.0.0.1/24 up")
-    os.system("route -n")
-    os.system("sshpass -p 'zys' scp -o StrictHostKeyChecking=no hypervisorVPNClient1.sh root@10.0.0.11:~/")
-#     TODO AUTOMATE THIS PART
-    os.system("sshpass -p 'zys' ssh -o StrictHostKeyChecking=no -t root@10.0.0.11 'sh /root/hypervisorVPNClient1.sh'")
+    keyDir = "/home/yuen/Desktop/openvpenca/keys"
+    keyName = "client1"
+    vpnserver = "10.0.1.11"
+    nextHop = ""
+    startVPN.init_switch_ip("10.0.0.1", 24)
+    startVPN.startServiceVPNClient("10.0.0.11:5000", keyDir, keyName, vpnserver, nextHop)
     os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
 
 
