@@ -1,5 +1,6 @@
 from app import app
 from threading import Lock
+import enclave
 
 port_offset_lock = Lock()
 port_offset = 3
@@ -26,3 +27,9 @@ def get_port_offset():
     offset = port_offset
     port_offset_lock.release()
     return offset
+
+
+@app.route('/enclave/new', methods=['PUT'])
+def create_new_enclave():
+    new_enclave = enclave.Enclave()
+    return new_enclave.enclave_id

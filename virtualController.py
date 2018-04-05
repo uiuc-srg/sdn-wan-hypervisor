@@ -23,7 +23,9 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_0
+# from ryu.ofproto import ofproto_v1_0
+from ryu.ofproto import ofproto_v1_2 as ofproto_v12
+
 from ryu.lib.mac import haddr_to_bin
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
@@ -31,7 +33,7 @@ from ryu.lib.packet import ether_types
 from ryu.lib.packet import tcp
 
 class SimpleSwitch(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION]
+    OFP_VERSIONS = [ofproto_v12.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
@@ -43,28 +45,32 @@ class SimpleSwitch(app_manager.RyuApp):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         # match tcp packet from 10.0.0.10 to 10.0.0.20 with dst_port 24
-        match = parser.OFPMatch(in_port=3, dl_type=0x0800, nw_proto=6, nw_dst="10.0.0.10", nw_src="10.0.0.20",
-                                tp_dst=24)
+        match = parser.OFPMatch(in_port=3, eth_type=0x0800, ip_proto=6, ipv4_dst="10.0.0.10", ipv4_src="10.0.0.20",
+                                tcp_dst=24)
         # change the the dst_port of matched tcp packets to 22 and output to switch 1
-        actions = [datapath.ofproto_parser.OFPActionSetTpDst(22), datapath.ofproto_parser.OFPActionOutput(1)]
+        actions = [datapath.ofproto_parser.OFPActionSetField(tcp_dst=22), datapath.ofproto_parser.OFPActionOutput(1)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
             priority=65534,
-            flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         datapath.send_msg(mod)
 
         # rules for the reverse direction
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        match = parser.OFPMatch(in_port=1, dl_type=0x0800, nw_proto=6, nw_src="10.0.0.10", nw_dst="10.0.0.20",
-                                tp_src=22)
-        actions = [datapath.ofproto_parser.OFPActionSetTpSrc(24), datapath.ofproto_parser.OFPActionOutput(3)]
+        match = parser.OFPMatch(in_port=1, eth_type=0x0800, ip_proto=6, ipv4_dst="10.0.0.10", ipv4_src="10.0.0.20",
+                                tcp_src=22)
+        actions = [datapath.ofproto_parser.OFPActionSetField(tcp_src=24), datapath.ofproto_parser.OFPActionOutput(3)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
             priority=65534,
-            flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)

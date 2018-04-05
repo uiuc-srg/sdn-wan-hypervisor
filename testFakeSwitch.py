@@ -27,19 +27,20 @@ from ryu.ofproto import ofproto_v1_0
 from ryu.lib.mac import haddr_to_bin
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
-from ryu.lib.packet import ether_types
-from ryu.controller.handler import set_ev_handler
 from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
     MAIN_DISPATCHER
 import connectionTest
 from struct import *
-from ryu.ofproto import ofproto_v1_0 as ofproto_v1
+# from ryu.ofproto import ofproto_v1_0 as ofproto_v1
+from ryu.ofproto import ofproto_v1_2 as ofproto_v12
+
 from ryu.ofproto import ofproto_common
 from ryu.ofproto import ofproto_parser
-from ryu.ofproto import ofproto_v1_0_parser as ofproto_v1_parser
+# from ryu.ofproto import ofproto_v1_0_parser as ofproto_v1_parser
+from ryu.ofproto import ofproto_v1_2_parser as ofproto_v12_parser
+
 from app import app
 import thread
-import time
 from socket import error as socket_error
 import errno
 
@@ -94,10 +95,11 @@ def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
     hello_from_switch = recv_loop(s)
     print(hello_from_switch)
 
+    print(switch_config_msg)
     # config stage
-    config_msg = pack(ofproto_v1.OFP_HEADER_PACK_STR, 0x1, 0x6, 32, switch_config_msg.xid)
-    config_msg += pack(ofproto_v1.OFP_SWITCH_FEATURES_PACK_STR, switch_config_msg.datapath_id, switch_config_msg.n_buffers, switch_config_msg.n_tables,
-                       switch_config_msg.capabilities, switch_config_msg.actions)
+    config_msg = pack(ofproto_v12.OFP_HEADER_PACK_STR, 0x1, 0x6, 32, switch_config_msg.xid)
+    config_msg += pack(ofproto_v12.OFP_SWITCH_FEATURES_PACK_STR, switch_config_msg.datapath_id, switch_config_msg.n_buffers, switch_config_msg.n_tables,
+                       switch_config_msg.capabilities, switch_config_msg._reserved)
     s.send(config_msg)
 
     # A msg for the match action is
@@ -112,7 +114,7 @@ def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
         (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
 
     print("RECEIVED MSG TYPE", msg_type)
-    mod = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
+    mod = ofproto_v12_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
     print("flow tp dst:", mod.match.tp_dst)
     mod.match.tp_dst += port_offset
     print("flow new tp dst:", mod.match.tp_dst)
@@ -120,7 +122,7 @@ def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
 
     buf2 = recv_loop(s)
     (version, msg_type, msg_len, xid) = ofproto_parser.header(buf2)
-    mod2 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf2)
+    mod2 = ofproto_v12_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf2)
     print("flow tp src:", mod2.actions[0].tp)
     mod2.actions[0].tp += port_offset
     print("flow new tp src:", mod2.actions[0].tp)
@@ -129,12 +131,12 @@ def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
 
     buf3 = recv_loop(s)
     (version, msg_type, msg_len, xid) = ofproto_parser.header(buf3)
-    mod3 = ofproto_v1_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf3)
+    mod3 = ofproto_v12_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf3)
     print(mod3)
 
 
 class SimpleSwitch(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION]
+    OFP_VERSIONS = [ofproto_v12.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
@@ -156,18 +158,14 @@ class SimpleSwitch(app_manager.RyuApp):
         print ev.msg
         print "hello_handler"
 
-    def add_flow(self, datapath, in_port, dst, src, actions):
+    def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto
-
-        match = datapath.ofproto_parser.OFPMatch(
-            in_port=in_port,
-            dl_dst=haddr_to_bin(dst), dl_src=haddr_to_bin(src))
-
-        mod = datapath.ofproto_parser.OFPFlowMod(
-            datapath=datapath, match=match, cookie=0,
-            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=ofproto.OFP_DEFAULT_PRIORITY,
-            flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+        parser = datapath.ofproto_parser
+        # construct flow_mod message and send it.
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+        mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
+                                match=match, instructions=inst)
         datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -175,40 +173,36 @@ class SimpleSwitch(app_manager.RyuApp):
         msg = ev.msg
         datapath = msg.datapath
         ofproto = datapath.ofproto
-
-        pkt = packet.Packet(msg.data)
-        eth = pkt.get_protocol(ethernet.ethernet)
-
-        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
-            # ignore lldp packet
-            return
-        dst = eth.dst
-        src = eth.src
-
+        parser = datapath.ofproto_parser
+        # get Datapath ID to identify OpenFlow switches.
         dpid = datapath.id
         self.mac_to_port.setdefault(dpid, {})
-
-        self.logger.info("packet in %s %s %s %s", dpid, src, dst, msg.in_port)
-
+        # analyse the received packets using the packet library.
+        pkt = packet.Packet(msg.data)
+        eth_pkt = pkt.get_protocol(ethernet.ethernet)
+        dst = eth_pkt.dst
+        src = eth_pkt.src
+        # get the received port number from packet_in message.
+        in_port = msg.match['in_port']
+        self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
         # learn a mac address to avoid FLOOD next time.
-        self.mac_to_port[dpid][src] = msg.in_port
+        self.mac_to_port[dpid][src] = in_port
 
+        # if the destination mac address is already learned,
+        # decide which port to output the packet, otherwise FLOOD.
         if dst in self.mac_to_port[dpid]:
             out_port = self.mac_to_port[dpid][dst]
         else:
             out_port = ofproto.OFPP_FLOOD
-
-        actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
-
-        # install a flow to avoid packet_in next time
+            # construct action list.
+        actions = [parser.OFPActionOutput(out_port)]
+        # install a flow to avoid packet_in next time.
         if out_port != ofproto.OFPP_FLOOD:
-            self.add_flow(datapath, msg.in_port, dst, src, actions)
-
-        data = None
-        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-            data = msg.data
-
-        out = datapath.ofproto_parser.OFPPacketOut(
-            datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
-            actions=actions, data=data)
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+            self.add_flow(datapath, 65534, match, actions)
+        # construct packet_out message and send it.
+        out = parser.OFPPacketOut(datapath=datapath,
+                                  buffer_id=ofproto.OFP_NO_BUFFER,
+                                  in_port=in_port, actions=actions,
+                                  data=msg.data)
         datapath.send_msg(out)
