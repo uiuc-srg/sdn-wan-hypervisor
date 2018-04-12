@@ -31,3 +31,4 @@ def startServiceVPNClient(nodeAddr, keyDirStr, keyNameStr, serverAddrStr, nextHo
                               })
     if res.ok:
         print("client start request sent")
+

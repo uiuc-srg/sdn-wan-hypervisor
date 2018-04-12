@@ -60,6 +60,7 @@ def startServiceVPNChannel():
     privatenets = "10.0.2.0,10.0.1.11"
     vpnclients = "client1,10.0.200.5,10.0.0.0"
     StartVPN.init_switch_ip("10.0.2.1", 24)
+    app.set_self_addr("10.0.2.1")
     StartVPN.startServiceVPNServer("10.0.2.10:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
     os.system("route add -net 10.0.0.0 netmask 255.255.255.0 gw 10.0.2.10")
     os.system("route add -net 10.0.200.0 netmask 255.255.255.0 gw 10.0.2.10")

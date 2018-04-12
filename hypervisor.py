@@ -57,6 +57,7 @@ def startServiceVPNChannel():
     vpnserver = "10.0.1.11"
     nextHop = ""
     startVPN.init_switch_ip("10.0.0.1", 24)
+    app.set_self_addr("10.0.0.1")
     startVPN.startServiceVPNClient("10.0.0.11:5000", keyDir, keyName, vpnserver, nextHop)
     os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
 
@@ -78,6 +79,19 @@ class SimpleSwitch(app_manager.RyuApp):
         self.config_msg = ev.msg
         # tries to connect to 7891
         # thread.start_new_thread(fake_switch_thread, (datapath, self.helo_msg, ev.msg, self))
+        # ofproto = datapath.ofproto
+        # parser = datapath.ofproto_parser
+        # # match tcp packet from 10.0.0.10 to 10.0.0.20 with dst_port 24
+        # match = parser.OFPMatch(in_port=3, eth_type=0x0800, ip_proto=6, ipv4_dst="10.0.2.1",)
+        # # change the the dst_port of matched tcp packets to 22 and output to switch 1
+        # actions = [parser.OFPActionOutput(1)]
+        # inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        # mod = datapath.ofproto_parser.OFPFlowMod(
+        #     datapath=datapath, match=match, cookie=0,
+        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+        #     priority=65534, table_id=1,
+        #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)
     def hello_handler(self, ev):

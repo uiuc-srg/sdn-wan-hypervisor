@@ -37,3 +37,12 @@ def startServiceVPNClient(nodeAddr, keyDirStr, keyNameStr, serverAddrStr, nextHo
         return True
     else:
         return False
+
+
+def stopServiceVPN(nodeAddr):
+    res = requests.post("http://" + nodeAddr + '/stopVPNService')
+    if res.ok:
+        print("stop request sent")
+        return True
+    else:
+        return False

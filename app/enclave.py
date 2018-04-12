@@ -1,28 +1,10 @@
+import datetime
+
+
 class Enclave:
-    _next_vlan_id = 1
-    _next_enclave_id = 1
-
-    def __init__(self):
-        self.enclave_id = Enclave.generate_new_enclave_id()
-        self.vlan_id = Enclave.generate_new_vlan_id()
-
-    def get_vlan_id(self):
-        return self.vlan_id
-
-    def get_enclave_id(self):
-        return self.enclave_id
-
-    def write_to_db(self):
-        pass
-
-    @classmethod
-    def generate_new_vlan_id(cls):
-        temp = cls._next_enclave_id
-        cls._next_enclave_id += 1
-        return temp
-
-    @classmethod
-    def generate_new_enclave_id(cls):
-        temp = cls._next_enclave_id
-        cls._next_enclave_id += 1
-        return temp
+    def __init__(self, enclave_id, initiator_addr, committed=False, vlan_tag=-1):
+        self.enclave_id = enclave_id
+        self.vlan_tag = vlan_tag
+        self.committed = committed
+        self.initiator_addr = initiator_addr
+        self.created_time = datetime.datetime.now()

@@ -52,3 +52,9 @@ def startVPNClient():
     f.close()
     os.system("sh clientConfig.sh")
     return "started\n"
+
+
+@app.route("/stopVPNService")
+def stopVPNService():
+    os.system("killall -SIGINT openvpn")
+    return "stopped"
