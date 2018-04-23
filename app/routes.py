@@ -105,17 +105,20 @@ def create_new_enclave():
                         requests.post("http://" + institution + ":5678/enclave/roll_back", json={"enclave_id": new_enclave_id})
             else:
                 break
+    print("commit process done")
 
     if commit_success:
+        # result = str(new_enclave_id) + "\n"
         if service.commit(service.addr, new_enclave_id) != enclaveService.COMMIT_SUCCESS:
             result = "local commit fail\n"
             commit_success = False
         else:
-            result = str(new_enclave_id) + "\n", 200
+            result = str(new_enclave_id) + "\n"
 
     service.unstage(service.addr)
     for institution in institutions_list:
         requests.post("http://" + institution + ":5678/enclave/unstage", json={"initiator": service.addr})
+    print("unstage all process done")
 
     if commit_success:
         return result, 200
@@ -264,3 +267,7 @@ def create_new_vpn():
     vpnclients = "client1,10.0.201.5," + configs['subnet']
     StartVPN.startServiceVPNServer("10.0.2.11:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
     return jsonify(vpnserver=vpnserver, privatenets=privatenets)
+
+
+# TODO: ADD ENDPOINT TO ADD PYHSICAL POINT TO THE ENCLAVE
+

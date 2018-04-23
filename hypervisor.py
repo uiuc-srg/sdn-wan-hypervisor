@@ -20,11 +20,7 @@ An OpenFlow 1.0 L2 learning switch implementation.
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
-from ryu.controller.handler import MAIN_DISPATCHER
-from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_0
-from ryu.lib.mac import haddr_to_bin
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
@@ -59,7 +55,7 @@ def startServiceVPNChannel():
     startVPN.init_switch_ip("10.0.0.1", 24)
     app.set_self_addr("10.0.0.1")
     startVPN.startServiceVPNClient("10.0.0.11:5000", keyDir, keyName, vpnserver, nextHop)
-    os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
+    # os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
 
 
 class SimpleSwitch(app_manager.RyuApp):
@@ -90,6 +86,31 @@ class SimpleSwitch(app_manager.RyuApp):
         #     datapath=datapath, match=match, cookie=0,
         #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
         #     priority=65534, table_id=1,
+        #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # datapath.send_msg(mod)
+
+
+        # ofproto = datapath.ofproto
+        # parser = datapath.ofproto_parser
+        # match = parser.OFPMatch(eth_type=0x0800, ipv4_dst="10.0.2.10")
+        # actions = [parser.OFPActionSetField(ipv4_src="10.0.0.1"), parser.OFPActionOutput(3)]
+        # inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        # mod = datapath.ofproto_parser.OFPFlowMod(
+        #     datapath=datapath, match=match, cookie=0,
+        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+        #     priority=65534, table_id=0,
+        #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # datapath.send_msg(mod)
+        #
+        # ofproto = datapath.ofproto
+        # parser = datapath.ofproto_parser
+        # match = parser.OFPMatch(in_port=3, eth_type=0x0800, ipv4_dst="10.0.0.10")
+        # actions = [parser.OFPActionOutput(1)]
+        # inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        # mod = datapath.ofproto_parser.OFPFlowMod(
+        #     datapath=datapath, match=match, cookie=0,
+        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+        #     priority=65534, table_id=0,
         #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         # datapath.send_msg(mod)
 
