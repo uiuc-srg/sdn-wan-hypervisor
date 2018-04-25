@@ -12,6 +12,7 @@ port_offset_lock = Lock()
 port_offset = 3
 service = enclaveService.Service()
 
+
 @app.route('/')
 @app.route('/index')
 def index():
@@ -37,6 +38,14 @@ def get_port_offset():
 
 def set_self_addr(addr):
     service.set_self_addr(addr)
+
+
+def set_datapath(datapath):
+    service.set_datapath(datapath)
+
+
+def append_vpn_host_list(internal_addr, public_addr, privatenets_str, available, switch_port):
+    service.append_vpn_hosts(internal_addr, public_addr, privatenets_str, available, switch_port)
 
 # @app.route('/enclave/new', methods=['POST'])
 # def create_new_enclave():
@@ -109,8 +118,9 @@ def create_new_enclave():
 
     if commit_success:
         # result = str(new_enclave_id) + "\n"
-        if service.commit(service.addr, new_enclave_id) != enclaveService.COMMIT_SUCCESS:
-            result = "local commit fail\n"
+        local_commit_result = service.commit(service.addr, new_enclave_id)
+        if local_commit_result != enclaveService.COMMIT_SUCCESS:
+            result = "local commit fail with fail number" + str(local_commit_result) + "\n"
             commit_success = False
         else:
             result = str(new_enclave_id) + "\n"
@@ -208,35 +218,49 @@ def create_new_vpn_client():
     vpnserver = configs["vpn_server"]
     nextHop = ""
     vpnserver_host_info = service.get_next_vpn_host()
-    host_private_addr = vpnserver_host_info["internal_addr"]
-    host_public_addr = vpnserver_host_info["public_addr"]
-    enclave_id = configs["enclave_id"]
+    if vpnserver_host_info is None:
+        return "no available vpn hosts", 404
+    host_private_addr = vpnserver_host_info.internal_addr
+    host_public_addr = vpnserver_host_info.public_addr
+    enclave_id = int(configs["enclave_id"])
     res = StartVPN.startServiceVPNClient(host_private_addr+":5000", key_dir, key_name, vpnserver, nextHop)
     service.save_vpn_client_to_database(enclave_id, host_public_addr, host_private_addr, key_dir, key_name, vpnserver, nextHop)
+    service.set_enclave_vpn_map(enclave_id, vpnserver_host_info)
+    service.bind_enclave_vpn(enclave_id)
     if res:
         return "success"
     else:
         return "create client fail", 404
 
 
+# @app.route('/vpn/bind_enclave_vpn', methods=['POST'])
+# def bind_enclave_vpn():
+#     print("receive new bind request")
+#
+
+
+# take subnet for client and enclaveid id
 @app.route('/vpn/create_server', methods=['POST'])
 def create_new_vpn_server():
     print("receive new vpn request")
     configs = request.get_json(silent=True)
     vpnserver_host_info = service.get_next_vpn_host()
-    if vpnserver_host_info == {}:
+    if vpnserver_host_info is None:
         return "no available vpn hosts", 404
     key_dir = "/home/yuen/Desktop/openvpenca/keys"
     key_name = "server2"
     subnet = "10.0.201.0"
-    host_public_addr = vpnserver_host_info["public_addr"]
-    privatenets = vpnserver_host_info["privatenets"]
+    host_public_addr = vpnserver_host_info.public_addr
+    privatenets = vpnserver_host_info.privatenets
+    host_private_addr = vpnserver_host_info.internal_addr
     # TODO add supports for more clients
     vpnclients = "client1,10.0.201.5," + configs['subnet']
-    enclave_id = configs['enclave_id']
-    host_private_addr = vpnserver_host_info["internal_addr"]
+    enclave_id = int(configs['enclave_id'])
     res = StartVPN.startServiceVPNServer(host_private_addr+":5000", key_dir, key_name, subnet, host_public_addr, privatenets, vpnclients)
     service.save_vpn_server_to_database(enclave_id, key_dir, key_name, subnet, host_public_addr, privatenets, vpnclients, host_private_addr)
+    service.set_enclave_vpn_map(enclave_id, vpnserver_host_info)
+    # TODO: PUSH THE RULE TO Openflow table
+    service.bind_enclave_vpn(enclave_id)
     if res:
         return jsonify(vpnserver=host_public_addr, privatenets=privatenets)
     else:

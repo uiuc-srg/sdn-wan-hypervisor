@@ -52,8 +52,10 @@ def startServiceVPNChannel():
     keyName = "client1"
     vpnserver = "10.0.1.11"
     nextHop = ""
-    startVPN.init_switch_ip("10.0.0.1", 24)
-    app.set_self_addr("10.0.0.1")
+    # startVPN.init_switch_ip("10.0.0.1", 24)
+    app.set_self_addr("10.0.0.13")
+    app.append_vpn_hosts("10.0.0.12", "10.0.3.11", "10.0.0.0,10.0.3.11", True, 5)
+
     startVPN.startServiceVPNClient("10.0.0.11:5000", keyDir, keyName, vpnserver, nextHop)
     # os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
 
@@ -73,6 +75,7 @@ class SimpleSwitch(app_manager.RyuApp):
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         self.config_msg = ev.msg
+        app.set_datapath(datapath)
         # tries to connect to 7891
         # thread.start_new_thread(fake_switch_thread, (datapath, self.helo_msg, ev.msg, self))
         # ofproto = datapath.ofproto

@@ -8,3 +8,7 @@ class Enclave:
         self.committed = committed
         self.initiator_addr = initiator_addr
         self.created_time = datetime.datetime.now()
+        self.vpn_host = None
+
+    def set_vpn_host(self, vpn_host):
+        self.vpn_host = vpn_host
