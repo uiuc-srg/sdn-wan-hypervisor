@@ -157,6 +157,7 @@ class Service:
     #     return new_enclave
 
     def bind_enclave_vpn(self, enclave_id):
+        # TODO save back up to database
         if enclave_id not in self.commited_list:
             return ENCLAVE_ID_NOT_COMMITTED
 
@@ -167,22 +168,30 @@ class Service:
 
         enclave_vlan_tag = enclave_obj.vlan_tag
         vpn_host_switch_port = enclave_vpn_host.switch_port
+        enclave_obj.append_enclave_switch_port(vpn_host_switch_port)
 
-        # strip off vlan tag and forward to port 1 and 3
-        ofproto = self.datapath.ofproto
-        parser = self.datapath.ofproto_parser
-        match = parser.OFPMatch(vlan_vid=(0x1000 | enclave_vlan_tag))
-        actions = [parser.OFPActionPopVlan(), parser.OFPActionOutput(vpn_host_switch_port)]
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        mod = self.datapath.ofproto_parser.OFPFlowMod(
-            datapath=self.datapath, match=match, cookie=0,
-            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=65534, table_id=1,
-            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-        self.datapath.send_msg(mod)
-        print("sent vlan binding")
+        # TODO: Deal with failure
+        # give a vlan tag to packect coming from the port connected to the vpn
+        self.bind_port_to_vlan(vpn_host_switch_port, enclave_vlan_tag)
+
+        self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
         return SUCCESS
 
+    def add_port_to_enclave(self, switch_port, enclave_id):
+        # TODO save back up to database
+        if enclave_id not in self.commited_list:
+            return ENCLAVE_ID_NOT_COMMITTED
+
+        enclave_obj = self.commited_list[enclave_id]
+        enclave_vlan_tag = enclave_obj.vlan_tag
+        enclave_obj.append_enclave_switch_port(switch_port)
+
+        # TODO: Deal with failure
+        # give a vlan tag to packet coming from a port
+        self.bind_port_to_vlan(switch_port, enclave_vlan_tag)
+
+        self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
+        return SUCCESS
 
 
 
@@ -217,3 +226,42 @@ class Service:
             '''INSERT INTO vpnClients (public_addr, interal_addr, enclave_id, keyDir, keyName, serverAddr, nextHop) VALUES (?, ?, ?, ?, ?, ?, ?)''',
             (client_public, client_private, enclave_id, keyDir, keyName, vpnserver_addr, next_hop))
         self.db_conn.commit()
+
+    def bind_port_to_vlan(self, port, vlan_tag):
+        ofproto = self.datapath.ofproto
+        parser = self.datapath.ofproto_parser
+        # TODO make some of those values configurable
+        # give a vlan tag to packect coming from the port connected to the vpn
+        match = parser.OFPMatch(in_port=port)
+        actions = [parser.OFPActionPushVlan(), parser.OFPActionSetField(vlan_vid=(0x1000 | vlan_tag))]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(1)]
+        mod = self.datapath.ofproto_parser.OFPFlowMod(
+            datapath=self.datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=65534, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        self.datapath.send_msg(mod)
+        print("sent vlan to port binding")
+
+    def bind_vlan_to_ports(self, vlan_tag, ports):
+        ofproto = self.datapath.ofproto
+        parser = self.datapath.ofproto_parser
+        match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
+
+        # append all ports belong to a enclave to to outgoing ports also forward packet
+        # to local (ovsbr0)
+        actions = [parser.OFPActionPopVlan(), parser.OFPActionOutput(ofproto.OFPP_LOCAL)]
+        for port in ports:
+            actions.append(parser.OFPActionOutput(port))
+
+        # TODO make some of those values configurable
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = self.datapath.ofproto_parser.OFPFlowMod(
+            datapath=self.datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=20, table_id=1,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        self.datapath.send_msg(mod)
+        print("sent vlan binding")

@@ -182,6 +182,16 @@ def enclave_rollback():
     service.roll_back_commit(enclave_id)
 
 
+@app.route('/enclave/add_port', methods=['POST'])
+def add_port_to_enclave():
+    configs = request.get_json(silent=True)
+    enclave_id = configs["enclave_id"]
+    port_number = int(configs["switch_port"])
+    res = service.add_port_to_enclave(port_number, enclave_id)
+    if res != enclaveService.SUCCESS:
+        return "adding port failed, error code :" + res, 400
+    return "ports added"
+
 # # {institution_a: a, institution_b: b, institution_a_subnet:, institution_b_subnet:, enclave_id: id}
 # @app.route('/enclave/connect', methods=['POST'])
 # def enclave_connect():

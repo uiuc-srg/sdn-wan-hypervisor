@@ -10,5 +10,11 @@ class Enclave:
         self.created_time = datetime.datetime.now()
         self.vpn_host = None
 
+        # TODO create a class that can contain more info than just the port number
+        self.switch_ports = []
+
     def set_vpn_host(self, vpn_host):
         self.vpn_host = vpn_host
+
+    def append_enclave_switch_port(self, port):
+        self.switch_ports.append(port)
