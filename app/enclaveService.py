@@ -15,12 +15,13 @@ ENCLAVE_ID_NOT_COMMITTED = -1
 ENCLAVE_HAS_NO_VPN_ASSIGNED = -2
 
 class VpnHostInfo:
-    def __init__(self, internal_addr, public_addr, privatenetsStr, available, switch_port):
+    def __init__(self, internal_addr, public_addr, privatenetsStr, available, switch_port, mac_addr):
         self.internal_addr = internal_addr
         self.public_addr = public_addr
         self.available = available
         self.switch_port = switch_port
         self.privatenets = privatenetsStr
+        self.mac_addr = mac_addr
 
 class Service:
     def __init__(self):
@@ -70,9 +71,9 @@ class Service:
         # TODO: MAYBE ADD A LOCK HERE
         return self.enclave_vpn_map[enclave_id]
 
-    def append_vpn_hosts(self, internal_addr, public_addr, privatenetsStr, available, switch_port):
+    def append_vpn_hosts(self, internal_addr, public_addr, privatenetsStr, available, switch_port, mac_addr):
         self.update_lock.acquire()
-        entry = VpnHostInfo(internal_addr, public_addr, privatenetsStr, available, switch_port)
+        entry = VpnHostInfo(internal_addr, public_addr, privatenetsStr, available, switch_port, mac_addr)
         self.vpn_hosts.append(entry)
         print self.vpn_hosts
         self.update_lock.release()
@@ -156,7 +157,7 @@ class Service:
     #     self.update_lock.release()
     #     return new_enclave
 
-    def bind_enclave_vpn(self, enclave_id):
+    def bind_enclave_vpn(self, enclave_id, reachable_subnets):
         # TODO save back up to database
         if enclave_id not in self.commited_list:
             return ENCLAVE_ID_NOT_COMMITTED
@@ -168,6 +169,7 @@ class Service:
 
         enclave_vlan_tag = enclave_obj.vlan_tag
         vpn_host_switch_port = enclave_vpn_host.switch_port
+        vpn_mac_addr = enclave_vpn_host.mac_addr
         enclave_obj.append_enclave_switch_port(vpn_host_switch_port)
 
         # TODO: Deal with failure
@@ -175,6 +177,11 @@ class Service:
         self.bind_port_to_vlan(vpn_host_switch_port, enclave_vlan_tag)
 
         self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
+
+        for subnet in reachable_subnets:
+            enclave_obj.append_reachable_subnet(subnet)
+            self.add_route_to_vpn(enclave_vlan_tag, subnet, vpn_host_switch_port, vpn_mac_addr)
+
         return SUCCESS
 
     def add_port_to_enclave(self, switch_port, enclave_id):
@@ -238,7 +245,7 @@ class Service:
         mod = self.datapath.ofproto_parser.OFPFlowMod(
             datapath=self.datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=65534, table_id=0,
+            priority=1000, table_id=0,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         # TODO: Deal with failure
         self.datapath.send_msg(mod)
@@ -250,7 +257,7 @@ class Service:
         match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
 
         # append all ports belong to a enclave to to outgoing ports also forward packet
-        # to local (ovsbr0)
+        # to local (ovsbr0) so that the switch can act as a default gateway
         actions = [parser.OFPActionPopVlan(), parser.OFPActionOutput(ofproto.OFPP_LOCAL)]
         for port in ports:
             actions.append(parser.OFPActionOutput(port))
@@ -260,8 +267,28 @@ class Service:
         mod = self.datapath.ofproto_parser.OFPFlowMod(
             datapath=self.datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=20, table_id=1,
+            priority=1000, table_id=1,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         # TODO: Deal with failure
         self.datapath.send_msg(mod)
         print("sent vlan binding")
+
+    def add_route_to_vpn(self, vlan_tag, subnet, vpn_switch_port, vpn_mac_addr):
+        ofproto = self.datapath.ofproto
+        parser = self.datapath.ofproto_parser
+
+        # change destination mac addr to the mac addr of vpn host so that
+        # the vpn host can forward it
+        match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)), eth_type=0x0800, ipv4_dst=subnet)
+        actions = [parser.OFPActionPopVlan(), parser.OFPActionSetField(eth_dst=vpn_mac_addr), parser.OFPActionOutput(vpn_switch_port)]
+
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = self.datapath.ofproto_parser.OFPFlowMod(
+            datapath=self.datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=2000, table_id=1,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        self.datapath.send_msg(mod)
+        print("add vpn static route")
+

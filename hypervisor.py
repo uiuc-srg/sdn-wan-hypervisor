@@ -54,7 +54,7 @@ def startServiceVPNChannel():
     nextHop = ""
     # startVPN.init_switch_ip("10.0.0.1", 24)
     app.set_self_addr("10.0.0.13")
-    app.append_vpn_hosts("10.0.0.12", "10.0.3.11", "10.0.0.0,10.0.3.11", True, 5)
+    app.append_vpn_hosts("10.0.0.12", "10.0.3.11", "10.0.0.0,10.0.3.11", True, 5, "00:00:00:aa:00:05")
 
     startVPN.startServiceVPNClient("10.0.0.11:5000", keyDir, keyName, vpnserver, nextHop)
     # os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")

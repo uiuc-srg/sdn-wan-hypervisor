@@ -44,8 +44,8 @@ def set_datapath(datapath):
     service.set_datapath(datapath)
 
 
-def append_vpn_host_list(internal_addr, public_addr, privatenets_str, available, switch_port):
-    service.append_vpn_hosts(internal_addr, public_addr, privatenets_str, available, switch_port)
+def append_vpn_host_list(internal_addr, public_addr, privatenets_str, available, switch_port, mac_addr):
+    service.append_vpn_hosts(internal_addr, public_addr, privatenets_str, available, switch_port, mac_addr)
 
 # @app.route('/enclave/new', methods=['POST'])
 # def create_new_enclave():
@@ -226,6 +226,7 @@ def create_new_vpn_client():
     key_dir = "/home/yuen/Desktop/openvpenca/keys"
     key_name = "client1"
     vpnserver = configs["vpn_server"]
+    reachable_subnets = configs["reachable_subnets"]
     nextHop = ""
     vpnserver_host_info = service.get_next_vpn_host()
     if vpnserver_host_info is None:
@@ -236,7 +237,7 @@ def create_new_vpn_client():
     res = StartVPN.startServiceVPNClient(host_private_addr+":5000", key_dir, key_name, vpnserver, nextHop)
     service.save_vpn_client_to_database(enclave_id, host_public_addr, host_private_addr, key_dir, key_name, vpnserver, nextHop)
     service.set_enclave_vpn_map(enclave_id, vpnserver_host_info)
-    service.bind_enclave_vpn(enclave_id)
+    service.bind_enclave_vpn(enclave_id, reachable_subnets)
     if res:
         return "success"
     else:
@@ -266,11 +267,12 @@ def create_new_vpn_server():
     # TODO add supports for more clients
     vpnclients = "client1,10.0.201.5," + configs['subnet']
     enclave_id = int(configs['enclave_id'])
+    reachable_subnets = configs["reachable_subnets"]
     res = StartVPN.startServiceVPNServer(host_private_addr+":5000", key_dir, key_name, subnet, host_public_addr, privatenets, vpnclients)
     service.save_vpn_server_to_database(enclave_id, key_dir, key_name, subnet, host_public_addr, privatenets, vpnclients, host_private_addr)
     service.set_enclave_vpn_map(enclave_id, vpnserver_host_info)
     # TODO: PUSH THE RULE TO Openflow table
-    service.bind_enclave_vpn(enclave_id)
+    service.bind_enclave_vpn(enclave_id, reachable_subnets)
     if res:
         return jsonify(vpnserver=host_public_addr, privatenets=privatenets)
     else:
