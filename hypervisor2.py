@@ -46,40 +46,61 @@ import os as os
 import startVPN as StartVPN
 
 
-def flaskThread():
+def flask_thread():
+    print "flask thread begins running"
     app.run("0.0.0.0", port=5678, debug=False)
 
 
-def startServiceVPNChannel():
+def start_service_vpn_channel():
     # os.system("sshpass -p 'zys' scp -o StrictHostKeyChecking=no hypervisorVPNServer1.sh root@10.0.2.10:~/")
     # os.system("sshpass -p 'zys' ssh -o StrictHostKeyChecking=no -t root@10.0.2.10 'sh /root/hypervisorVPNServer1.sh'")
-    keyDir = "/home/yuen/Desktop/openvpenca/keys"
-    keyName = "server2"
-    subNet = "10.0.200.0"
-    vpnserver = "10.0.1.11"
-    privatenets = "10.0.2.0,10.0.1.11"
-    vpnclients = "client1,10.0.200.5,10.0.0.0"
     # StartVPN.init_switch_ip("10.0.2.1", 24)
-    app.set_self_addr("10.0.2.13")
-    app.append_vpn_hosts("10.0.2.11", "10.0.3.10", "10.0.2.0,10.0.3.10", True, 3, "00:00:00:aa:00:0b")
+    # app.set_self_addr("10.0.2.13")
 
-    StartVPN.startServiceVPNServer("10.0.2.10:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
+    # internal_addr, public_addr, privatenet, switch_port, mac_addr, bridge_int, key_dir,
+    #                      eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end, available
+
+    app.append_vpn_hosts("10.0.0.16", "10.0.1.13", "10.0.0.0", 5, "00:00:00:aa:00:0e", "eth1",
+                         "/home/yuen/Desktop/openvpenca/keys/", "10.0.0.255", "10.0.0.50",
+                         "10.0.0.100", True)
+
+
+    # node_addr, node_internal_ip, node_public_ip, ca_location, cert_location, key_location,
+    #                          dh_location, client_ip_pool_start, client_ip_pool_stop, subnet_behind_server,
+    #                          bridged_eth_interface, eth_broadcast_addr
+    node_internal_ip = "10.0.0.17"
+    node_public_ip = "10.0.1.11"
+    key_dir = "/home/yuen/Desktop/openvpenca/keys/"
+    ca_location = key_dir + "ca.crt"
+    cert_location = key_dir + "server2.crt"
+    key_location = key_dir + "server2.key"
+    dh_location = key_dir + "dh2048.pem"
+    client_ip_pool_start = "10.0.0.50"
+    client_ip_pool_stop = "10.0.0.100"
+    subnet_behind_server = "10.0.0.0"
+    bridged_eth_interface = "eth1"
+    eth_broadcast_addr = "10.0.0.255"
+    print "sending vpn create request"
+    StartVPN.start_service_vpn_server("10.0.0.17:5000", node_internal_ip, node_public_ip, ca_location, cert_location,
+                                      key_location, dh_location, client_ip_pool_start, client_ip_pool_stop,
+                                      subnet_behind_server, bridged_eth_interface, eth_broadcast_addr)
     # os.system("route add -net 10.0.0.0 netmask 255.255.255.0 gw 10.0.2.10")
     # os.system("route add -net 10.0.200.0 netmask 255.255.255.0 gw 10.0.2.10")
-
-
+    print "primary vpn channel built"
 
 
 class SimpleSwitch(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v12.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
+        print "init service"
         super(SimpleSwitch, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.set_port_forwarding = False
         app.debug = False
-        startServiceVPNChannel()
-        thread.start_new_thread(flaskThread, ())
+        start_service_vpn_channel()
+        # TODO consider to move this function to other location
+        thread.start_new_thread(flask_thread, ())
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -142,4 +163,4 @@ class SimpleSwitch(app_manager.RyuApp):
                                   buffer_id=ofproto.OFP_NO_BUFFER,
                                   in_port=in_port, actions=actions,
                                   data=msg.data)
-        datapath.send_msg(out)
+        # datapath.send_msg(out)

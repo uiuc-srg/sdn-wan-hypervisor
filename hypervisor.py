@@ -43,33 +43,47 @@ import os as os
 import startVPN as startVPN
 
 
-def flaskThread():
+def flask_thread():
+    print "flask thread begins running"
     app.run("0.0.0.0", port=5678, debug=False)
 
 
-def startServiceVPNChannel():
-    keyDir = "/home/yuen/Desktop/openvpenca/keys"
-    keyName = "client1"
-    vpnserver = "10.0.1.11"
-    nextHop = ""
+def start_service_vpn_channel():
     # startVPN.init_switch_ip("10.0.0.1", 24)
-    app.set_self_addr("10.0.0.13")
-    app.append_vpn_hosts("10.0.0.12", "10.0.3.11", "10.0.0.0,10.0.3.11", True, 5, "00:00:00:aa:00:05")
+    # app.set_self_addr("10.0.0.13")
 
-    startVPN.startServiceVPNClient("10.0.0.11:5000", keyDir, keyName, vpnserver, nextHop)
+    app.append_vpn_hosts("10.0.0.12", "10.0.1.12", "10.0.0.0", 5, "00:00:00:aa:00:0d", "eth1",
+                         "/home/yuen/Desktop/openvpenca/keys/", "10.0.0.255", "10.0.0.50",
+                         "10.0.0.100", True)
+
+    node_internal_ip = "10.0.0.10"
+    vpn_server_ip = "10.0.1.11"
+    key_dir = "/home/yuen/Desktop/openvpenca/keys/"
+    ca_location = key_dir + "ca.crt"
+    cert_location = key_dir + "client1.crt"
+    key_location = key_dir + "client1.key"
+    dh_location = key_dir + "dh2048.pem"
+    bridged_eth_interface = "eth0"
+    eth_broadcast_addr = "10.0.0.255"
+    startVPN.start_service_vpn_client("10.0.0.10:5000", node_internal_ip, vpn_server_ip, ca_location, cert_location,
+                                      key_location, dh_location, bridged_eth_interface, eth_broadcast_addr)
     # os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
+    print "primary vpn channel built"
+
 
 
 class SimpleSwitch(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v12.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
+        print "init service"
         super(SimpleSwitch, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.set_port_forwarding = False
         app.debug = False
-        startServiceVPNChannel()
-        thread.start_new_thread(flaskThread, ())
+        start_service_vpn_channel()
+        # TODO consider to move this function to other location
+        thread.start_new_thread(flask_thread, ())
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -170,4 +184,4 @@ class SimpleSwitch(app_manager.RyuApp):
                                   buffer_id=ofproto.OFP_NO_BUFFER,
                                   in_port=in_port, actions=actions,
                                   data=msg.data)
-        datapath.send_msg(out)
+        # datapath.send_msg(out)

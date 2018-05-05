@@ -14,14 +14,23 @@ COMMIT_FAIL_NO_ENOUGH_VLAN = -2
 ENCLAVE_ID_NOT_COMMITTED = -1
 ENCLAVE_HAS_NO_VPN_ASSIGNED = -2
 
+
 class VpnHostInfo:
-    def __init__(self, internal_addr, public_addr, privatenetsStr, available, switch_port, mac_addr):
+    def __init__(self, internal_addr, public_addr, privatenet, switch_port, mac_addr, bridge_int, key_dir,
+                 eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end, available):
+        self.available = available
         self.internal_addr = internal_addr
         self.public_addr = public_addr
-        self.available = available
         self.switch_port = switch_port
-        self.privatenets = privatenetsStr
+        # TODO: CONSIDER TO REMOVE THIS AS THE SUBNET SHOULD BE KNOWN ONLY AFTER THE ENCLAVE AND DHCP IS SET
+        self.subnet = privatenet
         self.mac_addr = mac_addr
+        self.bridge_int = bridge_int
+        self.key_dir = key_dir
+        self.eth_broadcast_addr = eth_broadcast_addr
+        self.client_ip_pool_start = client_ip_pool_start
+        self.client_ip_pool_end = client_ip_pool_end
+
 
 class Service:
     def __init__(self):
@@ -54,7 +63,7 @@ class Service:
 
     def get_next_vpn_host(self):
         self.update_lock.acquire()
-        next_host = 1
+        next_host = None
         for host in self.vpn_hosts:
             if host.available:
                 next_host = host
@@ -65,15 +74,18 @@ class Service:
     def set_enclave_vpn_map(self, enclave_id, vpn_host):
         # TODO: MAYBE ADD A LOCK HERE
         self.enclave_vpn_map[enclave_id] = vpn_host
+        # TODO: Check the set vpn here
         self.commited_list[enclave_id].set_vpn_host(vpn_host)
 
     def get_enclave_vpn(self, enclave_id):
         # TODO: MAYBE ADD A LOCK HERE
         return self.enclave_vpn_map[enclave_id]
 
-    def append_vpn_hosts(self, internal_addr, public_addr, privatenetsStr, available, switch_port, mac_addr):
+    def append_vpn_hosts(self, internal_addr, public_addr, privatenet, switch_port, mac_addr, bridge_int, key_dir,
+                         eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end, available):
         self.update_lock.acquire()
-        entry = VpnHostInfo(internal_addr, public_addr, privatenetsStr, available, switch_port, mac_addr)
+        entry = VpnHostInfo(internal_addr, public_addr, privatenet, switch_port, mac_addr, bridge_int, key_dir,
+                            eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end, available)
         self.vpn_hosts.append(entry)
         print self.vpn_hosts
         self.update_lock.release()
@@ -157,30 +169,29 @@ class Service:
     #     self.update_lock.release()
     #     return new_enclave
 
-    def bind_enclave_vpn(self, enclave_id, reachable_subnets):
+    def bind_enclave_vpn(self, enclave_id, vpn_host):
         # TODO save back up to database
         if enclave_id not in self.commited_list:
             return ENCLAVE_ID_NOT_COMMITTED
 
         enclave_obj = self.commited_list[enclave_id]
-        enclave_vpn_host = enclave_obj.vpn_host
-        if enclave_vpn_host is None:
-            return ENCLAVE_HAS_NO_VPN_ASSIGNED
+        # enclave_vpn_host = enclave_obj.vpn_host
+        # if enclave_vpn_host is None:
+        #     return ENCLAVE_HAS_NO_VPN_ASSIGNED
 
         enclave_vlan_tag = enclave_obj.vlan_tag
-        vpn_host_switch_port = enclave_vpn_host.switch_port
-        vpn_mac_addr = enclave_vpn_host.mac_addr
+        vpn_host_switch_port = vpn_host.switch_port
+        # vpn_mac_addr = vpn_host.mac_addr
         enclave_obj.append_enclave_switch_port(vpn_host_switch_port)
 
         # TODO: Deal with failure
         # give a vlan tag to packect coming from the port connected to the vpn
         self.bind_port_to_vlan(vpn_host_switch_port, enclave_vlan_tag)
-
         self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
 
-        for subnet in reachable_subnets:
-            enclave_obj.append_reachable_subnet(subnet)
-            self.add_route_to_vpn(enclave_vlan_tag, subnet, vpn_host_switch_port, vpn_mac_addr)
+        # for subnet in reachable_subnets:
+        #     enclave_obj.append_reachable_subnet(subnet)
+        #     self.add_route_to_vpn(enclave_vlan_tag, subnet, vpn_host_switch_port, vpn_mac_addr)
 
         return SUCCESS
 
@@ -200,14 +211,13 @@ class Service:
         self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
         return SUCCESS
 
-
-
-    def init_database(self):
+    @staticmethod
+    def init_database():
         conn = sqlite3.connect('enclave_service.db')
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS enclaves(enclave_id INTEGER, vlan_tag INTEGER);''')
-        c.execute('''CREATE TABLE IF NOT EXISTS vpnServers(public_addr TEXT, interal_addr TEXT, enclave_id INTEGER, key_dir TEXT, key_name Text, vpn_subnet TEXT, privatenets TEXT, vpnclients Text);''')
-        c.execute('''CREATE TABLE IF NOT EXISTS vpnClients(public_addr TEXT, interal_addr TEXT, enclave_id INTEGER, keyDir TEXT, keyName Text, serverAddr TEXT, nextHop TEXT);''')
+        c.execute('''CREATE TABLE IF NOT EXISTS vpnServers(enclave_id INTEGER, public_addr TEXT, interal_addr TEXT, key_dir TEXT, switch_port Text, subnet TEXT, bridge_int TEXT, eth_broadcast_addr Text, client_ip_pool_start Text, client_ip_pool_end Text);''')
+        c.execute('''CREATE TABLE IF NOT EXISTS vpnClients(enclave_id INTEGER, server_addr TEXT, interal_addr TEXT, key_dir TEXT, switch_port Text, subnet TEXT, bridge_int TEXT, eth_broadcast_addr Text);''')
 
         conn.commit()
         return conn
@@ -222,16 +232,16 @@ class Service:
         c.execute('''DELETE FROM enclaves WHERE enclave_id=? ''', (enclave_id,))
         self.db_conn.commit()
 
-    def save_vpn_server_to_database(self, enclave_id, keyDir, keyName, subNet, vpnserver_addr, privatenets, vpnclients, vpn_server_interal_addr):
+    def save_vpn_server_to_database(self, enclave_id, public_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end):
         c = self.db_conn.cursor()
-        c.execute('''INSERT INTO vpnServers (public_addr, interal_addr, enclave_id, key_dir, key_name, vpn_subnet, privatenets, vpnclients) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', (vpnserver_addr, vpn_server_interal_addr, enclave_id, keyDir, keyName, subNet, privatenets, vpnclients))
+        c.execute('''INSERT INTO vpnServers (enclave_id, public_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', (enclave_id, public_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end))
         self.db_conn.commit()
 
-    def save_vpn_client_to_database(self, enclave_id, client_public, client_private, keyDir, keyName, vpnserver_addr, next_hop):
+    def save_vpn_client_to_database(self, enclave_id, server_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr):
         c = self.db_conn.cursor()
         c.execute(
-            '''INSERT INTO vpnClients (public_addr, interal_addr, enclave_id, keyDir, keyName, serverAddr, nextHop) VALUES (?, ?, ?, ?, ?, ?, ?)''',
-            (client_public, client_private, enclave_id, keyDir, keyName, vpnserver_addr, next_hop))
+            '''INSERT INTO vpnClients (enclave_id, server_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr) VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (enclave_id, server_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr))
         self.db_conn.commit()
 
     def bind_port_to_vlan(self, port, vlan_tag):
@@ -273,22 +283,22 @@ class Service:
         self.datapath.send_msg(mod)
         print("sent vlan binding")
 
-    def add_route_to_vpn(self, vlan_tag, subnet, vpn_switch_port, vpn_mac_addr):
-        ofproto = self.datapath.ofproto
-        parser = self.datapath.ofproto_parser
-
-        # change destination mac addr to the mac addr of vpn host so that
-        # the vpn host can forward it
-        match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)), eth_type=0x0800, ipv4_dst=subnet)
-        actions = [parser.OFPActionPopVlan(), parser.OFPActionSetField(eth_dst=vpn_mac_addr), parser.OFPActionOutput(vpn_switch_port)]
-
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        mod = self.datapath.ofproto_parser.OFPFlowMod(
-            datapath=self.datapath, match=match, cookie=0,
-            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=2000, table_id=1,
-            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-        # TODO: Deal with failure
-        self.datapath.send_msg(mod)
-        print("add vpn static route")
+    # def add_route_to_vpn(self, vlan_tag, subnet, vpn_switch_port, vpn_mac_addr):
+    #     ofproto = self.datapath.ofproto
+    #     parser = self.datapath.ofproto_parser
+    #
+    #     # change destination mac addr to the mac addr of vpn host so that
+    #     # the vpn host can forward it
+    #     match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)), eth_type=0x0800, ipv4_dst=subnet)
+    #     actions = [parser.OFPActionPopVlan(), parser.OFPActionSetField(eth_dst=vpn_mac_addr), parser.OFPActionOutput(vpn_switch_port)]
+    #
+    #     inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+    #     mod = self.datapath.ofproto_parser.OFPFlowMod(
+    #         datapath=self.datapath, match=match, cookie=0,
+    #         command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+    #         priority=2000, table_id=1,
+    #         flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+    #     # TODO: Deal with failure
+    #     self.datapath.send_msg(mod)
+    #     print("add vpn static route")
 

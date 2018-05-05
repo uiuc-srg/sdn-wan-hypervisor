@@ -44,8 +44,11 @@ def set_datapath(datapath):
     service.set_datapath(datapath)
 
 
-def append_vpn_host_list(internal_addr, public_addr, privatenets_str, available, switch_port, mac_addr):
-    service.append_vpn_hosts(internal_addr, public_addr, privatenets_str, available, switch_port, mac_addr)
+def append_vpn_host_list(internal_addr, public_addr, privatenet, switch_port, mac_addr, bridge_int, key_dir,
+                         eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end, available):
+    service.append_vpn_hosts(internal_addr, public_addr, privatenet, switch_port, mac_addr, bridge_int, key_dir,
+                             eth_broadcast_addr, client_ip_pool_start, client_ip_pool_end, available)
+
 
 # @app.route('/enclave/new', methods=['POST'])
 # def create_new_enclave():
@@ -66,6 +69,7 @@ def append_vpn_host_list(internal_addr, public_addr, privatenets_str, available,
 # {institutions:a, b, c}
 @app.route('/enclave/new', methods=['POST'])
 def create_new_enclave():
+    # TODO: SAVE institution LIST TO DATABASE AND ENCLAVE CLASS
     print("new enclave request")
     configs = request.get_json(silent=True)
     # TODO ADD A DEFAULT OPTION
@@ -96,7 +100,8 @@ def create_new_enclave():
             retry_times += 1
             no_roll_back_list = []
             for idx in range(len(institutions_list)):
-                res = requests.post("http://" + institutions_list[idx] + ":5678/enclave/commit", json={"initiator": service.addr, "enclave_id": new_enclave_id})
+                res = requests.post("http://" + institutions_list[idx] + ":5678/enclave/commit",
+                                    json={"initiator": service.addr, "enclave_id": new_enclave_id})
                 if res.status_code != 200:
                     print res.content
                     print res.status_code
@@ -111,7 +116,8 @@ def create_new_enclave():
             if not commit_success:
                 for institution in institutions_list:
                     if institution not in no_roll_back_list:
-                        requests.post("http://" + institution + ":5678/enclave/roll_back", json={"enclave_id": new_enclave_id})
+                        requests.post("http://" + institution + ":5678/enclave/roll_back",
+                                      json={"enclave_id": new_enclave_id})
             else:
                 break
     print("commit process done")
@@ -146,6 +152,7 @@ def enclave_stage():
         return "stage success"
     else:
         return "stage not success", 400
+
 
 @app.route('/enclave/unstage', methods=['POST'])
 def enclave_unstage():
@@ -192,6 +199,7 @@ def add_port_to_enclave():
         return "adding port failed, error code :" + res, 400
     return "ports added"
 
+
 # # {institution_a: a, institution_b: b, institution_a_subnet:, institution_b_subnet:, enclave_id: id}
 # @app.route('/enclave/connect', methods=['POST'])
 # def enclave_connect():
@@ -223,21 +231,28 @@ def create_new_vpn_client():
     print("receive new vpn request")
     configs = request.get_json(silent=True)
 
-    key_dir = "/home/yuen/Desktop/openvpenca/keys"
-    key_name = "client1"
-    vpnserver = configs["vpn_server"]
-    reachable_subnets = configs["reachable_subnets"]
-    nextHop = ""
     vpnserver_host_info = service.get_next_vpn_host()
     if vpnserver_host_info is None:
         return "no available vpn hosts", 404
-    host_private_addr = vpnserver_host_info.internal_addr
-    host_public_addr = vpnserver_host_info.public_addr
+
+    vpn_server_ip = configs["vpn_server"]
     enclave_id = int(configs["enclave_id"])
-    res = StartVPN.startServiceVPNClient(host_private_addr+":5000", key_dir, key_name, vpnserver, nextHop)
-    service.save_vpn_client_to_database(enclave_id, host_public_addr, host_private_addr, key_dir, key_name, vpnserver, nextHop)
+    node_internal_ip = vpnserver_host_info.internal_addr
+    node_addr = node_internal_ip + ":5000"
+    ca_location = vpnserver_host_info.key_dir + "ca.crt"
+    cert_location = vpnserver_host_info.key_dir + "client1.crt"
+    key_location = vpnserver_host_info.key_dir + "client1.key"
+    dh_location = vpnserver_host_info.key_dir + "dh2048.pem"
+    bridged_eth_interface = vpnserver_host_info.bridge_int
+    eth_broadcast_addr = vpnserver_host_info.eth_broadcast_addr
+
+    res = StartVPN.start_service_vpn_client(node_addr, node_internal_ip, vpn_server_ip, ca_location, cert_location,
+                                            key_location, dh_location, bridged_eth_interface, eth_broadcast_addr)
+
+    # service.save_vpn_client_to_database(enclave_id, host_public_addr, host_private_addr, key_dir, key_name, vpnserver,
+    #                                     nextHop)
     service.set_enclave_vpn_map(enclave_id, vpnserver_host_info)
-    service.bind_enclave_vpn(enclave_id, reachable_subnets)
+    service.bind_enclave_vpn(enclave_id, vpnserver_host_info)
     if res:
         return "success"
     else:
@@ -258,23 +273,32 @@ def create_new_vpn_server():
     vpnserver_host_info = service.get_next_vpn_host()
     if vpnserver_host_info is None:
         return "no available vpn hosts", 404
-    key_dir = "/home/yuen/Desktop/openvpenca/keys"
-    key_name = "server2"
-    subnet = "10.0.201.0"
-    host_public_addr = vpnserver_host_info.public_addr
-    privatenets = vpnserver_host_info.privatenets
-    host_private_addr = vpnserver_host_info.internal_addr
-    # TODO add supports for more clients
-    vpnclients = "client1,10.0.201.5," + configs['subnet']
+
     enclave_id = int(configs['enclave_id'])
-    reachable_subnets = configs["reachable_subnets"]
-    res = StartVPN.startServiceVPNServer(host_private_addr+":5000", key_dir, key_name, subnet, host_public_addr, privatenets, vpnclients)
-    service.save_vpn_server_to_database(enclave_id, key_dir, key_name, subnet, host_public_addr, privatenets, vpnclients, host_private_addr)
+    node_internal_ip = vpnserver_host_info.internal_addr
+    node_addr = node_internal_ip + ":5000"
+    node_public_ip = vpnserver_host_info.public_addr
+    ca_location = vpnserver_host_info.key_dir + "ca.crt"
+    cert_location = vpnserver_host_info.key_dir + "server2.crt"
+    key_location = vpnserver_host_info.key_dir + "server2.key"
+    dh_location = vpnserver_host_info.key_dir + "dh2048.pem"
+    client_ip_pool_start = vpnserver_host_info.client_ip_pool_start
+    client_ip_pool_stop = vpnserver_host_info.client_ip_pool_end
+    subnet_behind_server = vpnserver_host_info.subnet
+    bridged_eth_interface = vpnserver_host_info.bridge_int
+    eth_broadcast_addr = vpnserver_host_info.eth_broadcast_addr
+
+    res = StartVPN.start_service_vpn_server(node_addr, node_internal_ip, node_public_ip, ca_location, cert_location,
+                                            key_location,
+                                            dh_location, client_ip_pool_start, client_ip_pool_stop,
+                                            subnet_behind_server,
+                                            bridged_eth_interface, eth_broadcast_addr)
+    # service.save_vpn_server_to_database(enclave_id, key_dir, key_name, subnet, host_public_addr, privatenets,
+    #                                     vpnclients, host_private_addr)
     service.set_enclave_vpn_map(enclave_id, vpnserver_host_info)
-    # TODO: PUSH THE RULE TO Openflow table
-    service.bind_enclave_vpn(enclave_id, reachable_subnets)
+    service.bind_enclave_vpn(enclave_id, vpnserver_host_info)
     if res:
-        return jsonify(vpnserver=host_public_addr, privatenets=privatenets)
+        return jsonify(vpnserver=node_public_ip, privatenets=subnet_behind_server)
     else:
         return "create server fail", 404
 
@@ -289,21 +313,18 @@ def enclave_list():
     print("new enclave request")
     return service.get_commited_enclaves()
 
-
-@app.route('/vpncreate', methods=['POST'])
-def create_new_vpn():
-    print("receive new vpn request")
-    configs = request.get_json(silent=True)
-
-    keyDir = "/home/yuen/Desktop/openvpenca/keys"
-    keyName = "server2"
-    subNet = "10.0.201.0"
-    vpnserver = "10.0.3.10"
-    privatenets = "10.0.2.0,10.0.1.11"
-    vpnclients = "client1,10.0.201.5," + configs['subnet']
-    StartVPN.startServiceVPNServer("10.0.2.11:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
-    return jsonify(vpnserver=vpnserver, privatenets=privatenets)
-
+# @app.route('/vpncreate', methods=['POST'])
+# def create_new_vpn():
+#     print("receive new vpn request")
+#     configs = request.get_json(silent=True)
+#
+#     keyDir = "/home/yuen/Desktop/openvpenca/keys"
+#     keyName = "server2"
+#     subNet = "10.0.201.0"
+#     vpnserver = "10.0.3.10"
+#     privatenets = "10.0.2.0,10.0.1.11"
+#     vpnclients = "client1,10.0.201.5," + configs['subnet']
+#     StartVPN.startServiceVPNServer("10.0.2.11:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
+#     return jsonify(vpnserver=vpnserver, privatenets=privatenets)
 
 # TODO: ADD ENDPOINT TO ADD PYHSICAL POINT TO THE ENCLAVE
-

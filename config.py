@@ -15,7 +15,7 @@ class HypervisorConfig:
         vpnserver = "10.0.1.11"
         privatenets = "10.0.2.0,10.0.1.11"
         vpnclients = "client1,10.0.200.5,10.0.0.0"
-        config = generateVPNServerScript(keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
+        config = generate_vpn_server_config(keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
 
         f = open(filename, "w+")
         f.write(config)
@@ -28,7 +28,7 @@ class HypervisorConfig:
         keyName = "client1"
         vpnserver = serverAddr
         nextHop = ""
-        clientconfig = generateVPNClientScript(keyDir, keyName, vpnserver, nextHop)
+        clientconfig = generate_vpn_client_config(keyDir, keyName, vpnserver, nextHop)
 
         f = open(filename, "w+")
         f.write(clientconfig)
@@ -44,7 +44,7 @@ class HypervisorConfig:
         vpnserver = "10.0.0.11"
         privatenets = "10.0.1.0,10.0.0.11"
         vpnclients = ""
-        config = generateVPNServerScript(keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
+        config = generate_vpn_server_config(keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
 
         f = open(fileName, "w+")
         f.write(config)
@@ -58,7 +58,7 @@ class HypervisorConfig:
         keyName = "client1"
         vpnserver = serverAddr
         nextHop = ""
-        clientconfig = generateVPNClientScript(keyDir, keyName, vpnserver, nextHop)
+        clientconfig = generate_vpn_client_config(keyDir, keyName, vpnserver, nextHop)
 
         f = open(fileName, "w+")
         f.write(clientconfig)
