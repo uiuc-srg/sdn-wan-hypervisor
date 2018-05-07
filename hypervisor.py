@@ -81,7 +81,7 @@ class SimpleSwitch(app_manager.RyuApp):
         self.mac_to_port = {}
         self.set_port_forwarding = False
         app.debug = False
-        start_service_vpn_channel()
+        # start_service_vpn_channel()
         # TODO consider to move this function to other location
         thread.start_new_thread(flask_thread, ())
 
@@ -89,7 +89,8 @@ class SimpleSwitch(app_manager.RyuApp):
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         self.config_msg = ev.msg
-        app.set_datapath(datapath)
+        print ev.msg.datapath_id
+        app.append_datapath(ev.msg.datapath_id, datapath)
         # tries to connect to 7891
         # thread.start_new_thread(fake_switch_thread, (datapath, self.helo_msg, ev.msg, self))
         # ofproto = datapath.ofproto
@@ -184,4 +185,4 @@ class SimpleSwitch(app_manager.RyuApp):
                                   buffer_id=ofproto.OFP_NO_BUFFER,
                                   in_port=in_port, actions=actions,
                                   data=msg.data)
-        # datapath.send_msg(out)
+        datapath.send_msg(out)

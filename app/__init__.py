@@ -10,4 +10,4 @@ app.set_self_addr = routes.set_self_addr
 
 app.append_vpn_hosts = routes.append_vpn_host_list
 
-app.set_datapath = routes.set_datapath
+app.append_datapath = routes.append_datapath

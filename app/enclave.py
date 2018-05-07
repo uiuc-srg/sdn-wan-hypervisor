@@ -8,14 +8,14 @@ class Enclave:
         self.committed = committed
         self.initiator_addr = initiator_addr
         self.created_time = datetime.datetime.now()
-        self.vpn_host = None
+        self.vpn_host_list = []
         self.reachable_subnets = []
-
+        self.added_to_primary_switch = False
         # TODO create a class that can contain more info than just the port number
         self.switch_ports = []
 
-    def set_vpn_host(self, vpn_host):
-        self.vpn_host = vpn_host
+    def append_vpn_host(self, vpn_host):
+        self.vpn_host_list.append(vpn_host)
 
     def append_enclave_switch_port(self, port):
         self.switch_ports.append(port)
