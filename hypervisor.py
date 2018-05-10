@@ -17,18 +17,19 @@
 An OpenFlow 1.0 L2 learning switch implementation.
 """
 
-
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
-from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
+from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER, \
     MAIN_DISPATCHER
-import connectionTest
+import make_connection
 from struct import *
 # from ryu.ofproto import ofproto_v1_0 as ofproto_v1
 from ryu.ofproto import ofproto_v1_2 as ofproto_v12
+# from ryu.ofproto import ofproto_v1_3 as ofproto_v13
+
 
 from ryu.ofproto import ofproto_common
 from ryu.ofproto import ofproto_parser
@@ -37,10 +38,8 @@ from ryu.ofproto import ofproto_v1_2_parser as ofproto_v12_parser
 
 from app import app
 import thread
-from socket import error as socket_error
-import errno
-import os as os
-import startVPN as startVPN
+import middle_man
+import time
 
 
 def flask_thread():
@@ -48,28 +47,26 @@ def flask_thread():
     app.run("0.0.0.0", port=5678, debug=False)
 
 
-def start_service_vpn_channel():
-    # startVPN.init_switch_ip("10.0.0.1", 24)
-    # app.set_self_addr("10.0.0.13")
-
-    app.append_vpn_hosts("10.0.0.12", "10.0.1.12", "10.0.0.0", 5, "00:00:00:aa:00:0d", "eth1",
-                         "/home/yuen/Desktop/openvpenca/keys/", "10.0.0.255", "10.0.0.50",
-                         "10.0.0.100", True)
-
-    node_internal_ip = "10.0.0.10"
-    vpn_server_ip = "10.0.1.11"
-    key_dir = "/home/yuen/Desktop/openvpenca/keys/"
-    ca_location = key_dir + "ca.crt"
-    cert_location = key_dir + "client1.crt"
-    key_location = key_dir + "client1.key"
-    dh_location = key_dir + "dh2048.pem"
-    bridged_eth_interface = "eth0"
-    eth_broadcast_addr = "10.0.0.255"
-    startVPN.start_service_vpn_client("10.0.0.10:5000", node_internal_ip, vpn_server_ip, ca_location, cert_location,
-                                      key_location, dh_location, bridged_eth_interface, eth_broadcast_addr)
-    # os.system("route add -net 10.0.2.0 netmask 255.255.255.0 gw 10.0.0.11")
-    print "primary vpn channel built"
-
+def middle_man_tread():
+    while True:
+        new_guest_controller_request = app.get_new_guest_controller_request()
+        if new_guest_controller_request is not None:
+            if not new_guest_controller_request.only_forwarding:
+                thread.start_new_thread(middle_man.middle_man,
+                                        (new_guest_controller_request.datapath, new_guest_controller_request.vlan_tag,
+                                         new_guest_controller_request.local_address,
+                                         new_guest_controller_request.local_port,
+                                         new_guest_controller_request.guest_controller_addr,
+                                         new_guest_controller_request.guest_controller_port))
+            else:
+                thread.start_new_thread(middle_man.forwarding_thread,
+                                        (new_guest_controller_request.guest_controller_addr,
+                                         new_guest_controller_request.guest_controller_port,
+                                         new_guest_controller_request.local_address,
+                                         new_guest_controller_request.local_port))
+        else:
+            print "no new controller request======="
+            time.sleep(10)
 
 
 class SimpleSwitch(app_manager.RyuApp):
@@ -84,11 +81,12 @@ class SimpleSwitch(app_manager.RyuApp):
         # start_service_vpn_channel()
         # TODO consider to move this function to other location
         thread.start_new_thread(flask_thread, ())
+        thread.start_new_thread(middle_man_tread, ())
+        print "middle man background thread started"
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
-        self.config_msg = ev.msg
         print ev.msg.datapath_id
         app.append_datapath(ev.msg.datapath_id, datapath)
         # tries to connect to 7891
@@ -164,7 +162,7 @@ class SimpleSwitch(app_manager.RyuApp):
         src = eth_pkt.src
         # get the received port number from packet_in message.
         in_port = msg.match['in_port']
-        self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+        # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
         # learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src] = in_port
 

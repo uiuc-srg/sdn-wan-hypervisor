@@ -33,7 +33,7 @@ class VpnHostInfo:
 
 
 class SwitchInfo:
-    def __init__(self, dpid, upwards_port, datapath, downwards_ports):
+    def __init__(self, dpid, upwards_port, datapath, downwards_ports, address):
         self.dpid = dpid
         self.upwards_port = upwards_port
         self.is_primary = False
@@ -41,6 +41,7 @@ class SwitchInfo:
         self.enclave_ports_dic = {}
         self.downwards_ports = downwards_ports
         self.is_enclave_group_set = {}
+        self.address = address
 
 
 class Service:
@@ -66,9 +67,15 @@ class Service:
         self.is_primary_switch_enclave_group_set = {}
         self.primary_switch_down_ports = []
         self.slave_switch_dic = {}
+        self.next_fake_controller_port = 7000
 
-    def append_slave_switch(self, dpid, port, datapath, downwards_ports):
-        self.slave_switch_dic[dpid] = SwitchInfo(dpid, port, datapath, downwards_ports)
+    def get_next_fake_controller_port(self):
+        next_port = self.next_fake_controller_port
+        self.next_fake_controller_port += 1
+        return next_port
+
+    def append_slave_switch(self, dpid, port, datapath, downwards_ports, addresss):
+        self.slave_switch_dic[dpid] = SwitchInfo(dpid, port, datapath, downwards_ports, addresss)
 
     def append_datapath(self, datapath_id, datapath):
         self.datapath_dic[datapath_id] = datapath
@@ -136,7 +143,7 @@ class Service:
             self.in_transaction = False
         self.update_lock.release()
 
-    def commit(self, initiator, enclave_id):
+    def commit(self, initiator, enclave_id, institution_list):
         result = 0
         self.update_lock.acquire()
         if not self.in_transaction or self.transaction_initiator != initiator:
@@ -154,7 +161,7 @@ class Service:
             if vlan_tag == -1:
                 result = COMMIT_FAIL_NO_ENOUGH_VLAN
             else:
-                self.commited_list[enclave_id] = enclave.Enclave(enclave_id, initiator, True, vlan_tag)
+                self.commited_list[enclave_id] = enclave.Enclave(enclave_id, initiator, True, vlan_tag, institution_list)
                 result = COMMIT_SUCCESS
                 self.save_enclave_to_database(enclave_id, vlan_tag)
         self.update_lock.release()
@@ -435,6 +442,36 @@ class Service:
         match = parser.OFPMatch(in_port=upwards_port,  vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
         # append all ports belong to a enclave to to outgoing ports also forward packet
         # to local (ovsbr0) so that the switch can act as a default gateway
+        actions = []
+        # TODO make some of those values configurable
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(3)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=1000,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        datapath.send_msg(mod)
+
+        match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
+        # append all ports belong to a enclave to to outgoing ports also forward packet
+        # to local (ovsbr0) so that the switch can act as a default gateway
+        actions = []
+        # for port in existing_ports:
+        #     actions.append(parser.OFPActionOutput(port))
+        # TODO make some of those values configurable
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(4)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=500, table_id=3,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        datapath.send_msg(mod)
+
+        match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
+        # append all ports belong to a enclave to to outgoing ports also forward packet
+        # to local (ovsbr0) so that the switch can act as a default gateway
         actions = [parser.OFPActionPopVlan(), parser.OFPActionOutput(ofproto.OFPP_LOCAL)]
         for port in existing_ports:
             actions.append(parser.OFPActionOutput(port))
@@ -443,10 +480,11 @@ class Service:
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=1000,
+            priority=1000, table_id=4,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         # TODO: Deal with failure
         datapath.send_msg(mod)
+
 
         # for packects from the ports in the enclave,
         # 1. add vlan tag to it then
@@ -487,6 +525,18 @@ class Service:
                                  ofproto.OFPGT_ALL, group_id, buckets)
         datapath.send_msg(req)
 
+        match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
+        actions = []
+        # TODO make some of those values configurable
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions), parser.OFPInstructionGotoTable(2)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=500, table_id=1,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        datapath.send_msg(mod)
+
         # match vlan and sent to the group
         match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)))
         actions = [parser.OFPActionGroup(group_id)]
@@ -495,7 +545,7 @@ class Service:
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=1000, table_id=1,
+            priority=1000, table_id=2,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         # TODO: Deal with failure
         datapath.send_msg(mod)
@@ -531,6 +581,37 @@ class Service:
             datapath=datapath, match=match, cookie=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
             priority=1000, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        datapath.send_msg(mod)
+
+    def add_slave_switch_direct_rule(self, slave_mac_addr, vpn_port, slave_port, hypervisor_port):
+        # TODO MAKE THIS A VLAN THING
+        datapath = self.primary_datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(eth_dst=slave_mac_addr)
+        actions = [parser.OFPActionOutput(slave_port)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=1001, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        datapath.send_msg(mod)
+
+        datapath = self.primary_datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(eth_src=slave_mac_addr)
+        # TODO maybe add output to another downport?
+        actions = [parser.OFPActionOutput(hypervisor_port)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=1001, table_id=0,
             flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
         # TODO: Deal with failure
         datapath.send_msg(mod)

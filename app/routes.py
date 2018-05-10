@@ -5,6 +5,8 @@ from flask import request, jsonify
 import enclaveService
 import startVPN as StartVPN
 import requests
+import Queue
+import controllerRequest
 
 COMMIT_RETRY_TIMES = 3
 
@@ -101,7 +103,8 @@ def create_new_enclave():
             no_roll_back_list = []
             for idx in range(len(institutions_list)):
                 res = requests.post("http://" + institutions_list[idx] + ":5678/enclave/commit",
-                                    json={"initiator": service.addr, "enclave_id": new_enclave_id})
+                                    json={"initiator": service.addr, "enclave_id": new_enclave_id,
+                                          "institution_list": [service.addr] + institutions_list})
                 if res.status_code != 200:
                     print res.content
                     print res.status_code
@@ -124,7 +127,7 @@ def create_new_enclave():
 
     if commit_success:
         # result = str(new_enclave_id) + "\n"
-        local_commit_result = service.commit(service.addr, new_enclave_id)
+        local_commit_result = service.commit(service.addr, new_enclave_id, [service.addr] + institutions_list)
         if local_commit_result != enclaveService.COMMIT_SUCCESS:
             result = "local commit fail with fail number" + str(local_commit_result) + "\n"
             commit_success = False
@@ -199,7 +202,8 @@ def enclave_commit():
     configs = request.get_json(silent=True)
     initiator = configs["initiator"]
     enclave_id = configs["enclave_id"]
-    result = service.commit(initiator, enclave_id)
+    institution_list = configs["institution_list"]
+    result = service.commit(initiator, enclave_id, institution_list)
     print result
     if result == enclaveService.COMMIT_SUCCESS:
         return "commit success", 200
@@ -405,16 +409,21 @@ def start_system():
     configs = request.get_json(silent=True)
     institution_id = int(configs['institution_id'])
     if institution_id == 1:
+        service.set_self_addr("10.0.0.10")
         service.primary_datapath = service.datapath_dic[11141121]
         service.primary_switch_down_ports = [1, 3]
-        service.append_slave_switch(11141120, 1, service.datapath_dic[11141120], [3, 5])
-        service.append_slave_switch(11141123, 1, service.datapath_dic[11141123], [3, 5])
+        service.append_slave_switch(11141120, 1, service.datapath_dic[11141120], [3, 5], "10.0.0.1")
+        service.append_slave_switch(11141123, 1, service.datapath_dic[11141123], [3, 5], "10.0.0.2")
+        requests.post("http://10.0.0.1:5000/set_master_controller",
+                      json={"address": service.addr, "port": 6633})
+        requests.post("http://10.0.0.2:5000/set_master_controller",
+                      json={"address": service.addr, "port": 6633})
 
         service.append_vpn_hosts("10.0.0.12", "10.0.1.11", "10.0.0.0", 9, "00:00:00:aa:00:09", "eth0",
                                  "/home/yuen/Desktop/openvpenca/keys/", "10.0.0.255", "10.0.0.50",
                                  "10.0.0.100", True)
 
-        service.append_vpn_hosts("10.0.0.22", "10.0.1.14", "10.0.0.0", 11, " 00:00:00:aa:00:25", "eth0",
+        service.append_vpn_hosts("10.0.0.22", "10.0.1.14", "10.0.0.0", 11, "00:00:00:aa:00:25", "eth0",
                                  "/home/yuen/Desktop/openvpenca/keys/", "10.0.0.255", "10.0.0.50",
                                  "10.0.0.100", True)
 
@@ -431,17 +440,23 @@ def start_system():
         StartVPN.start_service_vpn_client("10.0.0.11:5000", node_internal_ip, vpn_server_ip, ca_location, cert_location,
                                           key_location, dh_location, bridged_eth_interface, eth_broadcast_addr)
         service.add_primary_switch_direct_rule(7, 5)
-
+        service.add_slave_switch_direct_rule("00:00:00:aa:00:00", 7, 1, 5)
+        service.add_slave_switch_direct_rule("00:00:00:aa:00:03", 7, 3, 5)
         service.ban_downwards_ports(11141120)
         service.ban_downwards_ports(11141123)
         print "primary vpn channel built"
         return "institution 1 stat"
 
     if institution_id == 2:
+        service.set_self_addr("10.0.0.13")
         service.primary_datapath = service.datapath_dic[11141135]
         service.primary_switch_down_ports = [5, 7]
-        service.append_slave_switch(11141141, 1, service.datapath_dic[11141141], [3, 5])
-        service.append_slave_switch(11141139, 1, service.datapath_dic[11141139], [3, 5])
+        service.append_slave_switch(11141141, 1, service.datapath_dic[11141141], [3, 5], "10.0.0.6")
+        service.append_slave_switch(11141139, 1, service.datapath_dic[11141139], [3, 5], "10.0.0.5")
+        requests.post("http://10.0.0.5:5000/set_master_controller",
+                      json={"address": service.addr, "port": 6633})
+        requests.post("http://10.0.0.6:5000/set_master_controller",
+                      json={"address": service.addr, "port": 6633})
 
         service.append_vpn_hosts("10.0.0.15", "10.0.1.13", "10.0.0.0", 3, "00:00:00:aa:00:11", "eth1",
                                  "/home/yuen/Desktop/openvpenca/keys/", "10.0.0.255", "10.0.0.50",
@@ -472,7 +487,10 @@ def start_system():
                                           key_location, dh_location, client_ip_pool_start, client_ip_pool_stop,
                                           subnet_behind_server, bridged_eth_interface, eth_broadcast_addr)
         service.add_primary_switch_direct_rule(1, 9)
-
+        # n11
+        service.add_slave_switch_direct_rule("00:00:00:aa:00:13", 1, 5, 9)
+        # n12
+        service.add_slave_switch_direct_rule("00:00:00:aa:00:03", 1, 7, 9)
         service.ban_downwards_ports(11141141)
         service.ban_downwards_ports(11141139)
         print "primary vpn channel built"
@@ -480,3 +498,111 @@ def start_system():
 
     if institution_id == 3:
         pass
+
+
+guest_controller_request_queue = Queue.Queue()
+
+
+@app.route('/enclave/new_controller', methods=['POST'])
+def new_controller_request():
+    print("receive new controller request")
+    configs = request.get_json(silent=True)
+    guest_controller_address = configs["guest_controller_address"]
+    enclave_id = configs["enclave_id"]
+    guest_controller_port = configs["guest_controller_port"]
+    connect_to_remote = configs["connect_to_remote"]
+    enclave_item = service.commited_list[enclave_id]
+    vlan_tag = enclave_item.vlan_tag
+    local_addr = service.addr
+
+    global guest_controller_request_queue
+    for (dpid, slave_switch) in service.slave_switch_dic.iteritems():
+        switch_addr = slave_switch.address
+        next_fake_controller_port = service.get_next_fake_controller_port()
+        res = requests.post("http://" + switch_addr + ":5000/new_controller",
+                            json={"address": local_addr, "port": next_fake_controller_port})
+        if not res.ok:
+            return "add new controller to switch failed", 400
+
+        controller_request = controllerRequest.ControllerRequest(slave_switch.datapath, vlan_tag,
+                                                                 guest_controller_address, local_addr,
+                                                                 next_fake_controller_port, guest_controller_port,
+                                                                 False)
+        guest_controller_request_queue.put(controller_request)
+
+    if not connect_to_remote:
+        return "guest controller request queued"
+
+    print "connecting to remote institutions"
+    print enclave_item.institution_list
+    for institution in enclave_item.institution_list:
+        if institution != service.addr:
+            res = requests.get("http://" + institution + ":5678/enclave/switch_count")
+            count = int(res.json()["count"])
+            port_list = []
+            for i in range(0, count):
+                port_list.append(service.get_next_fake_controller_port())
+
+            print "send new controller req to " + institution
+            res = requests.post("http://" + institution + ":5678/enclave/new_remote_controller",
+                                json={"guest_controller_address": service.addr, "enclave_id": enclave_id,
+                                      "guest_controller_ports": port_list,
+                                      "connect_to_remote": False})
+            if not res.ok:
+                return "contact remote institution failed", 400
+
+            for port in port_list:
+                controller_request = controllerRequest.ControllerRequest(None, -1,
+                                                                         guest_controller_address, local_addr,
+                                                                         port,
+                                                                         guest_controller_port, True)
+                guest_controller_request_queue.put(controller_request)
+
+    return "guest controller request queued"
+
+
+@app.route('/enclave/new_remote_controller', methods=['POST'])
+def new_remote_controller_request():
+    print("receive new controller request")
+    configs = request.get_json(silent=True)
+    guest_controller_address = configs["guest_controller_address"]
+    enclave_id = configs["enclave_id"]
+    guest_controller_port_list = configs["guest_controller_ports"]
+    connect_to_remote = configs["connect_to_remote"]
+    enclave_item = service.commited_list[enclave_id]
+    vlan_tag = enclave_item.vlan_tag
+    local_addr = service.addr
+
+    global guest_controller_request_queue
+    port_idx = 0
+    for (dpid, slave_switch) in service.slave_switch_dic.iteritems():
+        switch_addr = slave_switch.address
+        next_fake_controller_port = service.get_next_fake_controller_port()
+        res = requests.post("http://" + switch_addr + ":5000/new_controller",
+                            json={"address": local_addr, "port": next_fake_controller_port})
+        if not res.ok:
+            return "add new controller to switch failed", 400
+
+        controller_request = controllerRequest.ControllerRequest(slave_switch.datapath, vlan_tag,
+                                                                 guest_controller_address, local_addr,
+                                                                 next_fake_controller_port,
+                                                                 int(guest_controller_port_list[port_idx]),
+                                                                 False)
+        guest_controller_request_queue.put(controller_request)
+        port_idx += 1
+
+    if not connect_to_remote:
+        return "guest controller request queued"
+
+
+@app.route('/enclave/switch_count', methods=['GET'])
+def switch_count():
+    print("receive new switch count request")
+    return jsonify(count=len(service.slave_switch_dic))
+
+
+def get_new_guest_controller_request():
+    global guest_controller_request_queue
+    if not guest_controller_request_queue.empty():
+        return guest_controller_request_queue.get()
+    return None
