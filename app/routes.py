@@ -7,6 +7,8 @@ import startVPN as StartVPN
 import requests
 import Queue
 import controllerRequest
+import json
+
 
 COMMIT_RETRY_TIMES = 3
 
@@ -193,7 +195,7 @@ def enclave_unstage():
     configs = request.get_json(silent=True)
     initiator = configs["initiator"]
     service.unstage(initiator)
-    return "unstage success"
+    return "unstage success\n"
 
 
 @app.route('/enclave/commit', methods=['POST'])
@@ -232,7 +234,7 @@ def add_port_to_enclave():
     res = service.bind_slave_switch_port_to_vlan(datapath_id, enclave_id, port_number)
     if res != enclaveService.SUCCESS:
         return "adding port failed, error code :" + res, 400
-    return "ports added"
+    return "port added\n"
 
 
 # # {institution_a: a, institution_b: b, institution_a_subnet:, institution_b_subnet:, enclave_id: id}
@@ -401,14 +403,13 @@ def enclave_list():
 #     StartVPN.startServiceVPNServer("10.0.2.11:5000", keyDir, keyName, subNet, vpnserver, privatenets, vpnclients)
 #     return jsonify(vpnserver=vpnserver, privatenets=privatenets)
 
-# TODO: ADD ENDPOINT TO ADD PYHSICAL POINT TO THE ENCLAVE
-
 
 @app.route('/start_system', methods=['POST'])
 def start_system():
     configs = request.get_json(silent=True)
     institution_id = int(configs['institution_id'])
     if institution_id == 1:
+        service.primary_switch_hypervisor_port = 5
         service.set_self_addr("10.0.0.10")
         service.primary_datapath = service.datapath_dic[11141121]
         service.primary_switch_down_ports = [1, 3]
@@ -439,15 +440,18 @@ def start_system():
 
         StartVPN.start_service_vpn_client("10.0.0.11:5000", node_internal_ip, vpn_server_ip, ca_location, cert_location,
                                           key_location, dh_location, bridged_eth_interface, eth_broadcast_addr)
+
+        service.bind_hypervisor_dest_ip_to_port("10.0.0.13", 7)
         service.add_primary_switch_direct_rule(7, 5)
         service.add_slave_switch_direct_rule("00:00:00:aa:00:00", 7, 1, 5)
         service.add_slave_switch_direct_rule("00:00:00:aa:00:03", 7, 3, 5)
         service.ban_downwards_ports(11141120)
         service.ban_downwards_ports(11141123)
         print "primary vpn channel built"
-        return "institution 1 stat"
+        return "institution 1 stat\n"
 
     if institution_id == 2:
+        service.primary_switch_hypervisor_port = 9
         service.set_self_addr("10.0.0.13")
         service.primary_datapath = service.datapath_dic[11141135]
         service.primary_switch_down_ports = [5, 7]
@@ -486,6 +490,9 @@ def start_system():
                                           cert_location,
                                           key_location, dh_location, client_ip_pool_start, client_ip_pool_stop,
                                           subnet_behind_server, bridged_eth_interface, eth_broadcast_addr)
+
+        service.bind_hypervisor_dest_ip_to_port("10.0.0.10", 1)
+
         service.add_primary_switch_direct_rule(1, 9)
         # n11
         service.add_slave_switch_direct_rule("00:00:00:aa:00:13", 1, 5, 9)
@@ -494,10 +501,95 @@ def start_system():
         service.ban_downwards_ports(11141141)
         service.ban_downwards_ports(11141139)
         print "primary vpn channel built"
-        return "institution 2 stat"
+        return "institution 2 stat\n"
 
     if institution_id == 3:
-        pass
+        config_file_path = configs["config_file_path"]
+        with open(config_file_path) as data_file:
+            system_configs = json.load(data_file)
+            primary_switch_hypervisor_port = system_configs["port_to_hypervisor"]
+            self_addr = system_configs["hypervisor_address"]
+            primary_dpid = system_configs["primary_dpid"]
+            primary_switch_down_ports = system_configs["primary_switch_down_ports"]
+            hypervisor_OF_port = system_configs["hypervisor_of_port"]
+            service.primary_switch_hypervisor_port = primary_switch_hypervisor_port
+            service.set_self_addr(self_addr)
+            service.primary_datapath = service.datapath_dic[primary_dpid]
+            service.primary_switch_down_ports = primary_switch_down_ports
+
+            for switch in system_configs["slave_switches"]:
+                dpid = switch["dpid"]
+                upport = switch["up_port"]
+                down_ports = switch["down_ports"]
+                address = switch["10.0.0.1"]
+                mac_addr = switch["mac_addr"]
+                hyperv_slave_port = switch["hypervisor_port"]
+                service.append_slave_switch(dpid, upport, service.datapath_dic[dpid], down_ports, address)
+                requests.post("http://" + address + ":5000/set_master_controller",
+                              json={"address": service.addr, "port": hypervisor_OF_port})
+                service.add_slave_switch_direct_rule(mac_addr, -1, hyperv_slave_port, primary_switch_hypervisor_port)
+                service.ban_downwards_ports(dpid)
+
+            for host in system_configs["vpn_hosts"]:
+                internal_addr = host["internal_addr"]
+                public_addr = host["public_addr"]
+                privatenet = host["privatenet"]
+                switch_port = host["switch_port"]
+                mac_addr = host["mac_addr"]
+                bridge_int = host["bridge_int"]
+                key_dir = host["key_dir"]
+                eth_broadcast_addr = host["eth_broadcast_addr"]
+                client_ip_pool_start = host["client_ip_pool_start"]
+                client_ip_pool_end = host["client_ip_pool_end"]
+                service.append_vpn_hosts(internal_addr, public_addr, privatenet,
+                                         switch_port, mac_addr, bridge_int, key_dir,
+                                         eth_broadcast_addr, client_ip_pool_start,
+                                         client_ip_pool_end, True)
+
+            for primary_vpn_host in system_configs["primary_vpn_hosts"]:
+                if primary_vpn_host["type"] == "client":
+                    node_internal_ip = primary_vpn_host["node_internal_ip"]
+                    vpn_server_ip = primary_vpn_host["vpn_server_ip"]
+                    key_dir = primary_vpn_host["key_dir"]
+                    ca_location = key_dir + "ca.crt"
+                    cert_location = key_dir + "client1.crt"
+                    key_location = key_dir + "client1.key"
+                    dh_location = key_dir + "dh2048.pem"
+                    bridged_eth_interface = primary_vpn_host["bridged_eth_interface"]
+                    eth_broadcast_addr = primary_vpn_host["eth_broadcast_addr"]
+                    hypervisor_ip = primary_vpn_host["hypervisor_ip"]
+                    switch_port = primary_vpn_host["switch_port"]
+                    StartVPN.start_service_vpn_client(node_internal_ip + ":5000", node_internal_ip,vpn_server_ip,
+                                                      ca_location, cert_location,
+                                                      key_location, dh_location, bridged_eth_interface,
+                                                      eth_broadcast_addr)
+                    service.bind_hypervisor_dest_ip_to_port(hypervisor_ip, switch_port)
+                    service.add_primary_switch_direct_rule(switch_port, primary_switch_hypervisor_port)
+
+                else:
+                    node_internal_ip = primary_vpn_host["node_internal_ip"]
+                    node_public_ip = primary_vpn_host["node_public_ip"]
+                    key_dir = primary_vpn_host["key_dir"]
+                    ca_location = key_dir + "ca.crt"
+                    cert_location = key_dir + "client1.crt"
+                    key_location = key_dir + "client1.key"
+                    dh_location = key_dir + "dh2048.pem"
+                    client_ip_pool_start = primary_vpn_host["client_ip_pool_start"]
+                    client_ip_pool_stop = primary_vpn_host["client_ip_pool_stop"]
+                    subnet_behind_server = primary_vpn_host["subnet_behind_server"]
+                    bridged_eth_interface = primary_vpn_host["bridged_eth_interface"]
+                    eth_broadcast_addr = primary_vpn_host["eth_broadcast_addr"]
+                    hypervisor_ip = primary_vpn_host["hypervisor_ip"]
+                    switch_port = primary_vpn_host["switch_port"]
+                    StartVPN.start_service_vpn_server(node_internal_ip + ":5000", node_internal_ip, node_public_ip, ca_location,
+                                                      cert_location,
+                                                      key_location, dh_location, client_ip_pool_start,
+                                                      client_ip_pool_stop,
+                                                      subnet_behind_server, bridged_eth_interface, eth_broadcast_addr)
+
+                    service.bind_hypervisor_dest_ip_to_port(hypervisor_ip, switch_port)
+                    service.add_primary_switch_direct_rule(switch_port, primary_switch_hypervisor_port)
+    return "config loaded\n"
 
 
 guest_controller_request_queue = Queue.Queue()
@@ -511,9 +603,12 @@ def new_controller_request():
     enclave_id = configs["enclave_id"]
     guest_controller_port = configs["guest_controller_port"]
     connect_to_remote = configs["connect_to_remote"]
+    guest_controller_switch_port = configs["guest_controller_switch_port"]
     enclave_item = service.commited_list[enclave_id]
     vlan_tag = enclave_item.vlan_tag
     local_addr = service.addr
+    service.bind_hypervisor_dest_ip_to_port(guest_controller_address, guest_controller_switch_port)
+    service.add_primary_switch_direct_rule(guest_controller_switch_port, service.primary_switch_hypervisor_port)
 
     global guest_controller_request_queue
     for (dpid, slave_switch) in service.slave_switch_dic.iteritems():
@@ -522,7 +617,7 @@ def new_controller_request():
         res = requests.post("http://" + switch_addr + ":5000/new_controller",
                             json={"address": local_addr, "port": next_fake_controller_port})
         if not res.ok:
-            return "add new controller to switch failed", 400
+            return "add new controller to switch failed\n", 400
 
         controller_request = controllerRequest.ControllerRequest(slave_switch.datapath, vlan_tag,
                                                                  guest_controller_address, local_addr,
@@ -531,7 +626,7 @@ def new_controller_request():
         guest_controller_request_queue.put(controller_request)
 
     if not connect_to_remote:
-        return "guest controller request queued"
+        return "guest controller request queued\n"
 
     print "connecting to remote institutions"
     print enclave_item.institution_list
@@ -558,7 +653,7 @@ def new_controller_request():
                                                                          guest_controller_port, True)
                 guest_controller_request_queue.put(controller_request)
 
-    return "guest controller request queued"
+    return "guest controller request queued\n"
 
 
 @app.route('/enclave/new_remote_controller', methods=['POST'])
@@ -581,7 +676,7 @@ def new_remote_controller_request():
         res = requests.post("http://" + switch_addr + ":5000/new_controller",
                             json={"address": local_addr, "port": next_fake_controller_port})
         if not res.ok:
-            return "add new controller to switch failed", 400
+            return "add new controller to switch failed\n", 400
 
         controller_request = controllerRequest.ControllerRequest(slave_switch.datapath, vlan_tag,
                                                                  guest_controller_address, local_addr,
@@ -592,7 +687,7 @@ def new_remote_controller_request():
         port_idx += 1
 
     if not connect_to_remote:
-        return "guest controller request queued"
+        return "guest controller request queued\n"
 
 
 @app.route('/enclave/switch_count', methods=['GET'])

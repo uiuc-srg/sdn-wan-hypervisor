@@ -50,17 +50,32 @@ class SimpleSwitch(app_manager.RyuApp):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        match = parser.OFPMatch(eth_src="00:00:00:aa:00:18")
-        actions = [datapath.ofproto_parser.OFPActionSetField(eth_src="00:00:00:bb:00:10")]
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        mod = datapath.ofproto_parser.OFPFlowMod(
-            datapath=datapath, match=match, cookie=0,
-            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-            priority=1000, table_id=0,
-            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-        # TODO: Deal with failure
-        datapath.send_msg(mod)
         print ev.msg.datapath_id
+        if ev.msg.datapath_id == 11141120:
+            match = parser.OFPMatch(in_port=3, eth_type=0x0800, ip_proto=6, eth_src="00:00:00:aa:00:18", ipv4_dst="10.0.0.18",
+                                    ipv4_src="10.0.0.16", tcp_dst=23)
+            actions = [datapath.ofproto_parser.OFPActionSetField(tcp_dst=22)]
+            inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+            mod = datapath.ofproto_parser.OFPFlowMod(
+                datapath=datapath, match=match, cookie=0,
+                command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+                priority=1000, table_id=0,
+                flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+            # TODO: Deal with failure
+            datapath.send_msg(mod)
+
+            match = parser.OFPMatch(eth_type=0x0800, ip_proto=6, ipv4_dst="10.0.0.16",
+                                    ipv4_src="10.0.0.18", tcp_src=22)
+            actions = [datapath.ofproto_parser.OFPActionSetField(tcp_src=23)]
+            inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+            mod = datapath.ofproto_parser.OFPFlowMod(
+                datapath=datapath, match=match, cookie=0,
+                command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+                priority=1000, table_id=0,
+                flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+            # TODO: Deal with failure
+            datapath.send_msg(mod)
+            print "ssh port change rule sent"
 
 
     @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)

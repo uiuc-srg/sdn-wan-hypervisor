@@ -29,7 +29,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
     MAIN_DISPATCHER
-import connectionTest
+import make_connection
 from struct import *
 # from ryu.ofproto import ofproto_v1_0 as ofproto_v1
 from ryu.ofproto import ofproto_v1_2 as ofproto_v12
@@ -81,7 +81,7 @@ def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
 
     while True:
         try:
-            s = connectionTest.connect_to_ip('localhost', 7891)
+            s = make_connection.connect_to_ip('localhost', 7891)
             break
         except socket_error as serr:
             if serr.errno == errno.ECONNREFUSED:
@@ -115,7 +115,6 @@ def fake_switch_thread(datapath, hello_msg, switch_config_msg, switch_obj):
 
     print("RECEIVED MSG TYPE", msg_type)
     mod = ofproto_v12_parser.OFPFlowMod.parser(datapath, version, msg_type, msg_len, xid, buf)
-    print("flow tp dst:", mod.match.tp_dst)
     mod.match.tp_dst += port_offset
     print("flow new tp dst:", mod.match.tp_dst)
     datapath.send_msg(mod)

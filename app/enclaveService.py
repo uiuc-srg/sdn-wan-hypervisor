@@ -67,6 +67,7 @@ class Service:
         self.is_primary_switch_enclave_group_set = {}
         self.primary_switch_down_ports = []
         self.slave_switch_dic = {}
+        self.primary_switch_hypervisor_port = 0
         self.next_fake_controller_port = 7000
 
     def get_next_fake_controller_port(self):
@@ -607,6 +608,21 @@ class Service:
         match = parser.OFPMatch(eth_src=slave_mac_addr)
         # TODO maybe add output to another downport?
         actions = [parser.OFPActionOutput(hypervisor_port)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = datapath.ofproto_parser.OFPFlowMod(
+            datapath=datapath, match=match, cookie=0,
+            command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
+            priority=1001, table_id=0,
+            flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+        # TODO: Deal with failure
+        datapath.send_msg(mod)
+
+    def bind_hypervisor_dest_ip_to_port(self, ip_address, primary_switch_port):
+        datapath = self.primary_datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(in_port=self.primary_switch_hypervisor_port, eth_type=0x0800, ipv4_dst=ip_address)
+        actions = [parser.OFPActionOutput(primary_switch_port)]
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         mod = datapath.ofproto_parser.OFPFlowMod(
             datapath=datapath, match=match, cookie=0,

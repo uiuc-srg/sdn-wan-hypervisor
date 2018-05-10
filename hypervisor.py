@@ -133,8 +133,6 @@ class SimpleSwitch(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)
     def hello_handler(self, ev):
         self.helo_msg = ev.msg
-        print ev.msg
-        print "hello_handler"
 
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto

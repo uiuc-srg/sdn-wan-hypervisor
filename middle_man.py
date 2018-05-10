@@ -65,7 +65,7 @@ def guest_to_switch(guest_socket, switch_socket, datapath, vlan_tag):
                 raw_match[k] = v
             print raw_match
             match = parser.OFPMatch(**raw_match)
-            inst = msg.instructions
+            inst = [ins for ins in msg.instructions]
             inst.append(parser.OFPInstructionGotoTable(4))
             # TODO CHANGE priority
             mod = datapath.ofproto_parser.OFPFlowMod(
@@ -74,11 +74,14 @@ def guest_to_switch(guest_socket, switch_socket, datapath, vlan_tag):
                     priority=501, table_id=3,
                     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
             datapath.send_msg(mod)
+
+            inst2 = [ins for ins in msg.instructions]
+            inst2.append(parser.OFPInstructionGotoTable(2))
             mod = datapath.ofproto_parser.OFPFlowMod(
                 datapath=datapath, match=match, cookie=0,
                 command=msg.command, idle_timeout=0, hard_timeout=0,
                 priority=501, table_id=1,
-                flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
+                flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst2)
             datapath.send_msg(mod)
         else:
             switch_socket.send(guest_packet)
