@@ -1,0 +1,29 @@
+{
+  "hypervisor_address": "10.0.0.10",
+  "primary_dpid": 11141121,
+  "primary_switch_down_ports": [1, 3],
+  "port_to_hypervisor": 5,
+  "hypervisor_of_port": 6633,
+  "primary_vpn_hosts": [
+    { "type": "client", "switch_port": 7, "node_internal_ip": "10.0.0.11", "vpn_server_ip": "10.0.1.12",
+      "key_dir": "/home/yuen/Desktop/openvpenca/keys/", "bridged_eth_interface": "eth0",
+      "eth_broadcast_addr": "10.0.0.255", "hypervisor_ip": "10.0.0.13"
+    }
+  ],
+
+  "slave_switches" :[
+    {"dpid": 11141120, "up_port":1, "down_ports":[3, 5], "address": "10.0.0.1", "mac_addr": "00:00:00:aa:00:00", "hyperv_slave_port": 1},
+    {"dpid": 11141123, "up_port":1, "down_ports":[3, 5], "address": "10.0.0.2", "mac_addr": "00:00:00:aa:00:03", "hyperv_slave_port": 3}
+  ],
+
+  "vpn_hosts": [
+    {"internal_addr": "10.0.0.12", "public_addr": "10.0.1.11", "privatenet": "10.0.0.0", "switch_port": 9,
+      "mac_addr": "00:00:00:aa:00:09", "bridge_int": "eth0", "key_dir": "/home/yuen/Desktop/openvpenca/keys/",
+      "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100"
+    },
+    {"internal_addr": "10.0.0.22", "public_addr": "10.0.1.14", "privatenet": "10.0.0.0", "switch_port": 11,
+      "mac_addr": "00:00:00:aa:00:25", "bridge_int": "eth0", "key_dir": "/home/yuen/Desktop/openvpenca/keys/",
+      "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100"
+    }
+  ]
+}

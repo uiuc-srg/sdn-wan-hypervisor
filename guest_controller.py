@@ -25,12 +25,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
     MAIN_DISPATCHER
-import make_connection
-from struct import *
-# from ryu.ofproto import ofproto_v1_0 as ofproto_v1
 from ryu.ofproto import ofproto_v1_2 as ofproto_v12
-# from ryu.ofproto import ofproto_v1_3 as ofproto_v13
-from ryu.ofproto import ofproto_parser
 
 
 class SimpleSwitch(app_manager.RyuApp):

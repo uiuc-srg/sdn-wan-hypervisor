@@ -521,9 +521,9 @@ def start_system():
                 dpid = switch["dpid"]
                 upport = switch["up_port"]
                 down_ports = switch["down_ports"]
-                address = switch["10.0.0.1"]
+                address = switch["address"]
                 mac_addr = switch["mac_addr"]
-                hyperv_slave_port = switch["hypervisor_port"]
+                hyperv_slave_port = switch["hyperv_slave_port"]
                 service.append_slave_switch(dpid, upport, service.datapath_dic[dpid], down_ports, address)
                 requests.post("http://" + address + ":5000/set_master_controller",
                               json={"address": service.addr, "port": hypervisor_OF_port})
@@ -566,13 +566,13 @@ def start_system():
                     service.bind_hypervisor_dest_ip_to_port(hypervisor_ip, switch_port)
                     service.add_primary_switch_direct_rule(switch_port, primary_switch_hypervisor_port)
 
-                else:
+                if primary_vpn_host["type"] == "server":
                     node_internal_ip = primary_vpn_host["node_internal_ip"]
                     node_public_ip = primary_vpn_host["node_public_ip"]
                     key_dir = primary_vpn_host["key_dir"]
                     ca_location = key_dir + "ca.crt"
-                    cert_location = key_dir + "client1.crt"
-                    key_location = key_dir + "client1.key"
+                    cert_location = key_dir + "server2.crt"
+                    key_location = key_dir + "server2.key"
                     dh_location = key_dir + "dh2048.pem"
                     client_ip_pool_start = primary_vpn_host["client_ip_pool_start"]
                     client_ip_pool_stop = primary_vpn_host["client_ip_pool_stop"]

@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-An OpenFlow 1.0 L2 learning switch implementation.
-"""
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -24,18 +21,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER, \
     MAIN_DISPATCHER
-import make_connection
-from struct import *
-# from ryu.ofproto import ofproto_v1_0 as ofproto_v1
 from ryu.ofproto import ofproto_v1_2 as ofproto_v12
-# from ryu.ofproto import ofproto_v1_3 as ofproto_v13
-
-
-from ryu.ofproto import ofproto_common
-from ryu.ofproto import ofproto_parser
-# from ryu.ofproto import ofproto_v1_0_parser as ofproto_v1_parser
-from ryu.ofproto import ofproto_v1_2_parser as ofproto_v12_parser
-
 from app import app
 import thread
 import middle_man
@@ -89,46 +75,6 @@ class SimpleSwitch(app_manager.RyuApp):
         datapath = ev.msg.datapath
         print ev.msg.datapath_id
         app.append_datapath(ev.msg.datapath_id, datapath)
-        # tries to connect to 7891
-        # thread.start_new_thread(fake_switch_thread, (datapath, self.helo_msg, ev.msg, self))
-        # ofproto = datapath.ofproto
-        # parser = datapath.ofproto_parser
-        # # match tcp packet from 10.0.0.10 to 10.0.0.20 with dst_port 24
-        # match = parser.OFPMatch(in_port=3, eth_type=0x0800, ip_proto=6, ipv4_dst="10.0.2.1",)
-        # # change the the dst_port of matched tcp packets to 22 and output to switch 1
-        # actions = [parser.OFPActionOutput(1)]
-        # inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        # mod = datapath.ofproto_parser.OFPFlowMod(
-        #     datapath=datapath, match=match, cookie=0,
-        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-        #     priority=65534, table_id=1,
-        #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-        # datapath.send_msg(mod)
-
-
-        # ofproto = datapath.ofproto
-        # parser = datapath.ofproto_parser
-        # match = parser.OFPMatch(eth_type=0x0800, ipv4_dst="10.0.2.10")
-        # actions = [parser.OFPActionSetField(ipv4_src="10.0.0.1"), parser.OFPActionOutput(3)]
-        # inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        # mod = datapath.ofproto_parser.OFPFlowMod(
-        #     datapath=datapath, match=match, cookie=0,
-        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-        #     priority=65534, table_id=0,
-        #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-        # datapath.send_msg(mod)
-        #
-        # ofproto = datapath.ofproto
-        # parser = datapath.ofproto_parser
-        # match = parser.OFPMatch(in_port=3, eth_type=0x0800, ipv4_dst="10.0.0.10")
-        # actions = [parser.OFPActionOutput(1)]
-        # inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        # mod = datapath.ofproto_parser.OFPFlowMod(
-        #     datapath=datapath, match=match, cookie=0,
-        #     command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-        #     priority=65534, table_id=0,
-        #     flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-        # datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)
     def hello_handler(self, ev):
