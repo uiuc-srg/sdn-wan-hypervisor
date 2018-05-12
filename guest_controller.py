@@ -35,7 +35,6 @@ class SimpleSwitch(app_manager.RyuApp):
         print "init service"
         super(SimpleSwitch, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
-        self.set_port_forwarding = False
         # start_service_vpn_channel()
         # TODO consider to move this function to other location
 
@@ -45,7 +44,7 @@ class SimpleSwitch(app_manager.RyuApp):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        print ev.msg.datapath_id
+        print "connected to " + str(ev.msg.datapath_id)
         if ev.msg.datapath_id == 11141120:
             match = parser.OFPMatch(in_port=3, eth_type=0x0800, ip_proto=6, eth_src="00:00:00:aa:00:18", ipv4_dst="10.0.0.18",
                                     ipv4_src="10.0.0.16", tcp_dst=23)
@@ -76,8 +75,6 @@ class SimpleSwitch(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)
     def hello_handler(self, ev):
         self.helo_msg = ev.msg
-        print ev.msg
-        print "hello_handler"
 
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto

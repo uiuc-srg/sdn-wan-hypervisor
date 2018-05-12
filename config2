@@ -8,7 +8,11 @@
     { "type": "server", "switch_port": 1, "node_internal_ip": "10.0.0.14", "node_public_ip": "10.0.1.12",
       "key_dir": "/home/yuen/Desktop/openvpenca/keys/", "client_ip_pool_start": "10.0.0.50",
       "client_ip_pool_stop": "10.0.0.100", "subnet_behind_server": "10.0.0.0", "bridged_eth_interface": "eth1",
-      "eth_broadcast_addr": "10.0.0.255", "hypervisor_ip": "10.0.0.10"
+      "eth_broadcast_addr": "10.0.0.255", "hypervisor_ip": "10.0.0.10",
+      "ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
+      "cert_location": "/home/yuen/Desktop/openvpenca/keys/server2.crt",
+      "key_location": "/home/yuen/Desktop/openvpenca/keys/server2.key",
+      "dh_location": "/home/yuen/Desktop/openvpenca/keys/dh2048.pem"
     }
   ],
 
@@ -20,11 +24,27 @@
   "vpn_hosts": [
     {"internal_addr": "10.0.0.15", "public_addr": "10.0.1.13", "privatenet": "10.0.0.0", "switch_port": 3,
       "mac_addr": "00:00:00:aa:00:11", "bridge_int": "eth1", "key_dir": "/home/yuen/Desktop/openvpenca/keys/",
-      "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100"
+      "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100",
+      "client_ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
+      "client_cert_location": "/home/yuen/Desktop/openvpenca/keys/client1.crt",
+      "client_key_location": "/home/yuen/Desktop/openvpenca/keys/client1.key",
+      "client_dh_location": "/home/yuen/Desktop/openvpenca/keys/dh2048.pem",
+      "server_ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
+      "server_cert_location": "/home/yuen/Desktop/openvpenca/keys/server2.crt",
+      "server_key_location": "/home/yuen/Desktop/openvpenca/keys/server2.key",
+      "server_dh_location": "/home/yuen/Desktop/openvpenca/keys/dh2048.pem"
     },
     {"internal_addr": "10.0.0.23", "public_addr": "10.0.1.15", "privatenet": "10.0.0.0", "switch_port": 11,
       "mac_addr": "00:00:00:aa:00:28", "bridge_int": "eth1", "key_dir": "/home/yuen/Desktop/openvpenca/keys/",
-      "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100"
+      "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100",
+      "client_ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
+      "client_cert_location": "/home/yuen/Desktop/openvpenca/keys/client1.crt",
+      "client_key_location": "/home/yuen/Desktop/openvpenca/keys/client1.key",
+      "client_dh_location": "/home/yuen/Desktop/openvpenca/keys/dh2048.pem",
+      "server_ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
+      "server_cert_location": "/home/yuen/Desktop/openvpenca/keys/server2.crt",
+      "server_key_location": "/home/yuen/Desktop/openvpenca/keys/server2.key",
+      "server_dh_location": "/home/yuen/Desktop/openvpenca/keys/dh2048.pem"
     }
   ]
 }

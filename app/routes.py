@@ -12,8 +12,6 @@ import json
 
 COMMIT_RETRY_TIMES = 3
 
-port_offset_lock = Lock()
-port_offset = 3
 service = enclaveService.Service()
 
 
@@ -21,23 +19,6 @@ service = enclaveService.Service()
 @app.route('/index')
 def index():
     return "Hello, here is the sdn config api!"
-
-
-# TODO: TRIGER RULE CHANGING WHEN HITTED
-@app.route('/port/<offset>', methods=['PUT'])
-def define_port_incr(offset):
-    port_offset_lock.acquire()
-    global port_offset
-    port_offset = int(offset)
-    port_offset_lock.release()
-    return "new port offset set"
-
-
-def get_port_offset():
-    port_offset_lock.acquire()
-    offset = port_offset
-    port_offset_lock.release()
-    return offset
 
 
 def set_self_addr(addr):
@@ -145,7 +126,7 @@ def create_new_enclave():
         res = create_vpn_mesh(["127.0.0.1"] + institutions_list, new_enclave_id)
         if res == 0:
             return result, 200
-        return "Create vpn mesh failed", 400
+        return "Create vpn mesh failed\n", 400
     else:
         return result, 400
 
@@ -158,6 +139,7 @@ def create_vpn_mesh(institutions_list, enclave_id):
             res = requests.post("http://" + server_institution_addr + ":5678/vpn/create_server",
                                 json={"enclave_id": enclave_id})
             if res.status_code != 200:
+                print "create vpn server failed\n"
                 return -1
             else:
                 vpn_server_ip = res.json()["vpn_server"]
@@ -166,6 +148,7 @@ def create_vpn_mesh(institutions_list, enclave_id):
                     res = _create_new_vpn_client(vpn_server_ip, enclave_id)
                     if res == "success":
                         return 0
+                    print "create vpn client failed\n"
                     return -1
                 else:
                     print vpn_server_ip
@@ -173,6 +156,7 @@ def create_vpn_mesh(institutions_list, enclave_id):
                     res = requests.post("http://" + client_institution_addr + ":5678/vpn/create_client",
                                         json={"enclave_id": enclave_id, "vpn_server": vpn_server_ip})
                     if res.status_code != 200:
+                        print "create vpn client failed\n"
                         return -1
     return 0
 
@@ -237,43 +221,17 @@ def add_port_to_enclave():
     return "port added\n"
 
 
-# # {institution_a: a, institution_b: b, institution_a_subnet:, institution_b_subnet:, enclave_id: id}
-# @app.route('/enclave/connect', methods=['POST'])
-# def enclave_connect():
-#     print("new enclave request")
-#     configs = request.get_json(silent=True)
-#     institution_a = configs["institution_a"]
-#     institution_b = configs["institution_b"]
-#     institution_a_subnet = configs["institution_a_subnet"]
-#     institution_b_subnet = configs["institution_b_subnet"]
-#     enclave_id = configs["enclave_id"]
-#     res = requests.post("http://" + institution_a + "/vpn/create_server",
-# json={"enclave_id": enclave_id, "subnets":institution_b_subnet})
-#     if not res.ok:
-#         return res.content
-#
-#     vpnServerInfo = res.json()
-#     server_addr = vpnServerInfo["vpnserver"]
-#     server_subnets = vpnServerInfo["privatenets"]
-#     res = requests.post("http://" + institution_b + "/vpn/create_client",
-#                         json={"enclave_id": enclave_id, "subnets": server_subnets, "server_addr": server_addr})
-#     if not res.ok:
-#         # TODO: RELEASE RESOURCE WHEN FAIL
-#         # res = requests.post("http://" + institution_a + "/vpn/stop_vpn",
-#         #                     json={"enclave_id": enclave_id, "addr": institution_b_subnet})
-#         return "create connection fail", 404
-#     return "success"
 def _create_new_vpn_client(vpn_server_ip, enclave_id):
     vpnserver_host_info = service.get_next_vpn_host()
     if vpnserver_host_info is None:
-        return "no available vpn hosts"
+        return "no available vpn hosts\n"
 
     node_internal_ip = vpnserver_host_info.internal_addr
     node_addr = node_internal_ip + ":5000"
-    ca_location = vpnserver_host_info.key_dir + "ca.crt"
-    cert_location = vpnserver_host_info.key_dir + "client1.crt"
-    key_location = vpnserver_host_info.key_dir + "client1.key"
-    dh_location = vpnserver_host_info.key_dir + "dh2048.pem"
+    ca_location = vpnserver_host_info.client_ca_location
+    cert_location = vpnserver_host_info.client_cert_location
+    key_location = vpnserver_host_info.client_key_location
+    dh_location = vpnserver_host_info.client_dh_location
     bridged_eth_interface = vpnserver_host_info.bridge_int
     eth_broadcast_addr = vpnserver_host_info.eth_broadcast_addr
 
@@ -300,16 +258,16 @@ def create_new_vpn_client():
     vpnserver_host_info = service.get_next_vpn_host()
     if vpnserver_host_info is None:
         print "========================no available vpn hosts"
-        return "no available vpn hosts", 404
+        return "no available vpn hosts\n", 404
 
     vpn_server_ip = configs["vpn_server"]
     enclave_id = int(configs["enclave_id"])
     node_internal_ip = vpnserver_host_info.internal_addr
     node_addr = node_internal_ip + ":5000"
-    ca_location = vpnserver_host_info.key_dir + "ca.crt"
-    cert_location = vpnserver_host_info.key_dir + "client1.crt"
-    key_location = vpnserver_host_info.key_dir + "client1.key"
-    dh_location = vpnserver_host_info.key_dir + "dh2048.pem"
+    ca_location = vpnserver_host_info.client_ca_location
+    cert_location = vpnserver_host_info.client_cert_location
+    key_location = vpnserver_host_info.client_key_location
+    dh_location = vpnserver_host_info.client_dh_location
     bridged_eth_interface = vpnserver_host_info.bridge_int
     eth_broadcast_addr = vpnserver_host_info.eth_broadcast_addr
 
@@ -323,9 +281,9 @@ def create_new_vpn_client():
     print "binding enclave at primary switch\n"
     service.add_vlan_to_primary_switch(enclave_id)
     if res:
-        return "success"
+        return "success\n"
     else:
-        return "create client fail", 404
+        return "create client fail\n", 404
 
 
 # @app.route('/vpn/bind_enclave_vpn', methods=['POST'])
@@ -347,10 +305,10 @@ def create_new_vpn_server():
     node_internal_ip = vpnserver_host_info.internal_addr
     node_addr = node_internal_ip + ":5000"
     node_public_ip = vpnserver_host_info.public_addr
-    ca_location = vpnserver_host_info.key_dir + "ca.crt"
-    cert_location = vpnserver_host_info.key_dir + "server2.crt"
-    key_location = vpnserver_host_info.key_dir + "server2.key"
-    dh_location = vpnserver_host_info.key_dir + "dh2048.pem"
+    ca_location = vpnserver_host_info.server_ca_location
+    cert_location = vpnserver_host_info.server_cert_location
+    key_location = vpnserver_host_info.server_key_location
+    dh_location = vpnserver_host_info.server_dh_location
     client_ip_pool_start = vpnserver_host_info.client_ip_pool_start
     client_ip_pool_stop = vpnserver_host_info.client_ip_pool_end
     subnet_behind_server = vpnserver_host_info.subnet
@@ -538,28 +496,41 @@ def start_system():
                 mac_addr = host["mac_addr"]
                 bridge_int = host["bridge_int"]
                 key_dir = host["key_dir"]
+
+                server_ca_location = host["server_ca_location"]
+                server_cert_location = host["server_cert_location"]
+                server_key_location = host["server_key_location"]
+                server_dh_location = host["server_dh_location"]
+
+                client_ca_location = host["client_ca_location"]
+                client_cert_location = host["client_cert_location"]
+                client_key_location = host["client_key_location"]
+                client_dh_location = host["client_dh_location"]
+
                 eth_broadcast_addr = host["eth_broadcast_addr"]
                 client_ip_pool_start = host["client_ip_pool_start"]
                 client_ip_pool_end = host["client_ip_pool_end"]
                 service.append_vpn_hosts(internal_addr, public_addr, privatenet,
                                          switch_port, mac_addr, bridge_int, key_dir,
                                          eth_broadcast_addr, client_ip_pool_start,
-                                         client_ip_pool_end, True)
+                                         client_ip_pool_end, True, server_ca_location, server_cert_location,
+                                         server_key_location, server_dh_location, client_ca_location,
+                                         client_cert_location, client_key_location, client_dh_location)
 
             for primary_vpn_host in system_configs["primary_vpn_hosts"]:
                 if primary_vpn_host["type"] == "client":
                     node_internal_ip = primary_vpn_host["node_internal_ip"]
                     vpn_server_ip = primary_vpn_host["vpn_server_ip"]
                     key_dir = primary_vpn_host["key_dir"]
-                    ca_location = key_dir + "ca.crt"
-                    cert_location = key_dir + "client1.crt"
-                    key_location = key_dir + "client1.key"
-                    dh_location = key_dir + "dh2048.pem"
+                    ca_location = primary_vpn_host["ca_location"]
+                    cert_location = primary_vpn_host["cert_location"]
+                    key_location = primary_vpn_host["key_location"]
+                    dh_location = primary_vpn_host["dh_location"]
                     bridged_eth_interface = primary_vpn_host["bridged_eth_interface"]
                     eth_broadcast_addr = primary_vpn_host["eth_broadcast_addr"]
                     hypervisor_ip = primary_vpn_host["hypervisor_ip"]
                     switch_port = primary_vpn_host["switch_port"]
-                    StartVPN.start_service_vpn_client(node_internal_ip + ":5000", node_internal_ip,vpn_server_ip,
+                    StartVPN.start_service_vpn_client(node_internal_ip + ":5000", node_internal_ip, vpn_server_ip,
                                                       ca_location, cert_location,
                                                       key_location, dh_location, bridged_eth_interface,
                                                       eth_broadcast_addr)
@@ -570,10 +541,10 @@ def start_system():
                     node_internal_ip = primary_vpn_host["node_internal_ip"]
                     node_public_ip = primary_vpn_host["node_public_ip"]
                     key_dir = primary_vpn_host["key_dir"]
-                    ca_location = key_dir + "ca.crt"
-                    cert_location = key_dir + "server2.crt"
-                    key_location = key_dir + "server2.key"
-                    dh_location = key_dir + "dh2048.pem"
+                    ca_location = primary_vpn_host["ca_location"]
+                    cert_location = primary_vpn_host["cert_location"]
+                    key_location = primary_vpn_host["key_location"]
+                    dh_location = primary_vpn_host["dh_location"]
                     client_ip_pool_start = primary_vpn_host["client_ip_pool_start"]
                     client_ip_pool_stop = primary_vpn_host["client_ip_pool_stop"]
                     subnet_behind_server = primary_vpn_host["subnet_behind_server"]

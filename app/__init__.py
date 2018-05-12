@@ -4,10 +4,6 @@ app = Flask(__name__)
 from app import routes
 
 
-app.get_port_return = routes.get_port_offset
-
-app.set_self_addr = routes.set_self_addr
-
 app.append_vpn_hosts = routes.append_vpn_host_list
 
 app.append_datapath = routes.append_datapath
