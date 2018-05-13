@@ -181,7 +181,7 @@ class Service:
                 self.commited_list[enclave_id] = enclave.Enclave(enclave_id, initiator, True,
                                                                  vlan_tag, institution_list)
                 result = COMMIT_SUCCESS
-                self.save_enclave_to_database(enclave_id, vlan_tag)
+                self.save_enclave_to_database(enclave_id, vlan_tag, ','.join(institution_list))
         self.update_lock.release()
         return result
 
@@ -203,79 +203,22 @@ class Service:
     def get_commited_enclaves(self):
         print self.commited_list
         return str(len(self.commited_list)) + str(self.commited_list)
-    # def get_seq(self):
-    #     self.update_lock.acquire()
-    #     next_seq = self.seq
-    #     self.seq += 1
-    #     self.update_lock.release()
-    #     return next_seq
-
-    # def purpose_enclave(self):
-    #     self.update_lock.acquire()
-    #     next_enclave_id = self.next_enclave_ID
-    #     self.next_enclave_ID += 1
-    #     next_seq = self.seq
-    #     self.seq += 1
-    #     new_enclave = enclave.Enclave(next_enclave_id, self.addr, next_seq)
-    #     self.update_lock.release()
-    #     return new_enclave
-
-    # def bind_enclave_vpn(self, enclave_id, vpn_host):
-    #     # TODO save back up to database
-    #     if enclave_id not in self.commited_list:
-    #         return ENCLAVE_ID_NOT_COMMITTED
-    #
-    #     enclave_obj = self.commited_list[enclave_id]
-    #     # enclave_vpn_host = enclave_obj.vpn_host
-    #     # if enclave_vpn_host is None:
-    #     #     return ENCLAVE_HAS_NO_VPN_ASSIGNED
-    #
-    #     enclave_vlan_tag = enclave_obj.vlan_tag
-    #     vpn_host_switch_port = vpn_host.switch_port
-    #     # vpn_mac_addr = vpn_host.mac_addr
-    #     enclave_obj.append_enclave_switch_port(vpn_host_switch_port)
-    #
-    #     # TODO: Deal with failure
-    #     # give a vlan tag to packect coming from the port connected to the vpn
-    #     self.bind_port_to_vlan(vpn_host_switch_port, enclave_vlan_tag)
-    #     self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
-    #
-    #     # for subnet in reachable_subnets:
-    #     #     enclave_obj.append_reachable_subnet(subnet)
-    #     #     self.add_route_to_vpn(enclave_vlan_tag, subnet, vpn_host_switch_port, vpn_mac_addr)
-    #
-    #     return SUCCESS
-    #
-    # def add_port_to_enclave(self, switch_port, enclave_id):
-    #     # TODO save back up to database
-    #     if enclave_id not in self.commited_list:
-    #         return ENCLAVE_ID_NOT_COMMITTED
-    #
-    #     enclave_obj = self.commited_list[enclave_id]
-    #     enclave_vlan_tag = enclave_obj.vlan_tag
-    #     enclave_obj.append_enclave_switch_port(switch_port)
-    #
-    #     # TODO: Deal with failure
-    #     # give a vlan tag to packet coming from a port
-    #     self.bind_port_to_vlan(switch_port, enclave_vlan_tag)
-    #
-    #     self.bind_vlan_to_ports(enclave_vlan_tag, enclave_obj.switch_ports)
-    #     return SUCCESS
 
     @staticmethod
     def init_database():
         conn = sqlite3.connect('enclave_service.db')
         c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS enclaves(enclave_id INTEGER, vlan_tag INTEGER);''')
+        c.execute('''CREATE TABLE IF NOT EXISTS enclaves(enclave_id INTEGER, vlan_tag INTEGER, institution_list Text);''')
         c.execute('''CREATE TABLE IF NOT EXISTS vpnServers(enclave_id INTEGER, public_addr TEXT, interal_addr TEXT, key_dir TEXT, switch_port Text, subnet TEXT, bridge_int TEXT, eth_broadcast_addr Text, client_ip_pool_start Text, client_ip_pool_end Text);''')
         c.execute('''CREATE TABLE IF NOT EXISTS vpnClients(enclave_id INTEGER, server_addr TEXT, interal_addr TEXT, key_dir TEXT, switch_port Text, subnet TEXT, bridge_int TEXT, eth_broadcast_addr Text);''')
+        c.execute('''CREATE TABLE IF NOT EXISTS enclavePorts(enclave_id INTEGER, dpid INTEGER, port INTEGER);''')
 
         conn.commit()
         return conn
 
-    def save_enclave_to_database(self, enclave_id, vlan_tag):
+    def save_enclave_to_database(self, enclave_id, vlan_tag, institution_list):
         c = self.db_conn.cursor()
-        c.execute('''INSERT INTO enclaves (enclave_id, vlan_tag) VALUES (?, ?)''', (enclave_id, vlan_tag))
+        c.execute('''INSERT INTO enclaves (enclave_id, vlan_tag, institution_list) VALUES (?, ?, ?)''', (enclave_id, vlan_tag, institution_list))
         self.db_conn.commit()
 
     def delete_enclave_from_database(self, enclave_id):
@@ -295,24 +238,10 @@ class Service:
             (enclave_id, server_addr, interal_addr, key_dir, switch_port, subnet, bridge_int, eth_broadcast_addr))
         self.db_conn.commit()
 
-    # def add_route_to_vpn(self, vlan_tag, subnet, vpn_switch_port, vpn_mac_addr):
-    #     ofproto = self.datapath.ofproto
-    #     parser = self.datapath.ofproto_parser
-    #
-    #     # change destination mac addr to the mac addr of vpn host so that
-    #     # the vpn host can forward it
-    #     match = parser.OFPMatch(vlan_vid=(0x1000 | (vlan_tag | 0x1000)), eth_type=0x0800, ipv4_dst=subnet)
-    #     actions = [parser.OFPActionPopVlan(), parser.OFPActionSetField(eth_dst=vpn_mac_addr), parser.OFPActionOutput(vpn_switch_port)]
-    #
-    #     inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-    #     mod = self.datapath.ofproto_parser.OFPFlowMod(
-    #         datapath=self.datapath, match=match, cookie=0,
-    #         command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
-    #         priority=2000, table_id=1,
-    #         flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-    #     # TODO: Deal with failure
-    #     self.datapath.send_msg(mod)
-    #     print("add vpn static route")
+    def save_enclave_port_to_database(self, enclave_id, dpid, port):
+        c = self.db_conn.cursor()
+        c.execute('''INSERT INTO enclavePorts (enclave_id, dpid, port) VALUES (?, ?, ?)''', (enclave_id, dpid, port))
+        self.db_conn.commit()
 
     def add_vlan_to_primary_switch(self, enclave_id):
         enclave_item = self.commited_list[enclave_id]
