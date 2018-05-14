@@ -174,7 +174,7 @@ Since we haven't added `n17` to enclave 1, we'll use it to demonstrate resilienc
 
 `n17`:
 
-*** VLAN Spoofing ***
+***VLAN Spoofing***
 ```bash
 /sbin/modprobe 8021q
 /sbin/vconfig add eth0 0
@@ -184,7 +184,7 @@ ping 10.0.0.17 # Ping n15 in enclave 1
 
 Assuming the attacker can use insider knowledge or other means of learning the IP address or MAC address of an enclave 1 node:
 
-*** MAC Spoofing ***
+***MAC Spoofing***
 `n17`
 ```bash
 ifconfig eth0.0 hw ether 00:00:00:aa:00:18
