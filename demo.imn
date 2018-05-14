@@ -86,8 +86,8 @@ node n3 {
 	!
     }
     canvas c1
-    iconcoords {395.0 282.0}
-    labelcoords {395.0 314.0}
+    iconcoords {405.0 251.0}
+    labelcoords {405.0 283.0}
     interface-peer {eth0 n1}
     interface-peer {eth1 n2}
     interface-peer {eth2 n4}
@@ -109,8 +109,8 @@ node n4 {
 	!
     }
     canvas c1
-    iconcoords {396.0 61.0}
-    labelcoords {396.0 93.0}
+    iconcoords {405.0 88.0}
+    labelcoords {405.0 120.0}
     interface-peer {eth0 n3}
 }
 
@@ -209,12 +209,12 @@ node n6 {
 node n7 {
     type lanswitch
     network-config {
-	hostname n7
+	hostname Internet
 	!
     }
     canvas c1
-    iconcoords {773.0 232.0}
-    labelcoords {773.0 256.0}
+    iconcoords {755.0 264.0}
+    labelcoords {755.0 288.0}
     interface-peer {e0 n5}
     interface-peer {e1 n6}
     interface-peer {e2 n8}
@@ -239,8 +239,8 @@ node n8 {
 	!
     }
     canvas c1
-    iconcoords {936.0 151.0}
-    labelcoords {936.0 183.0}
+    iconcoords {932.0 163.0}
+    labelcoords {932.0 195.0}
     interface-peer {eth0 n7}
     interface-peer {eth1 n10}
     custom-config {
@@ -285,8 +285,8 @@ node n9 {
 	!
     }
     canvas c1
-    iconcoords {921.0 230.0}
-    labelcoords {921.0 262.0}
+    iconcoords {918.0 254.0}
+    labelcoords {918.0 286.0}
     interface-peer {eth0 n7}
     interface-peer {eth1 n10}
     custom-config {
@@ -323,8 +323,8 @@ node n10 {
 	!
     }
     canvas c1
-    iconcoords {1061.0 221.0}
-    labelcoords {1061.0 253.0}
+    iconcoords {1086.0 248.0}
+    labelcoords {1086.0 280.0}
     interface-peer {eth0 n8}
     interface-peer {eth1 n9}
     interface-peer {eth2 n11}
@@ -423,8 +423,8 @@ node n13 {
 	!
     }
     canvas c1
-    iconcoords {1054.0 81.0}
-    labelcoords {1054.0 113.0}
+    iconcoords {1090.0 90.0}
+    labelcoords {1090.0 122.0}
     interface-peer {eth0 n10}
 }
 
@@ -592,8 +592,8 @@ node n21 {
 	!
     }
     canvas c1
-    iconcoords {917.0 311.0}
-    labelcoords {917.0 343.0}
+    iconcoords {917.0 338.0}
+    labelcoords {917.0 370.0}
     interface-peer {eth0 n7}
     interface-peer {eth1 n10}
     custom-config {
@@ -762,6 +762,34 @@ link l24 {
 link l25 {
     nodes {n3 n22}
     bandwidth 0
+}
+
+annotation a1 {
+    iconcoords {106.0 21.0 697.0 540.0}
+    type rectangle
+    label {Institution 1}
+    labelcolor black
+    fontfamily {Arial}
+    fontsize {12}
+    color #C0C0FF
+    width 0
+    border black
+    rad 25
+    canvas c1
+}
+
+annotation a2 {
+    iconcoords {808 22 1376 542}
+    type rectangle
+    label {Institution 2}
+    labelcolor black
+    fontfamily {Arial}
+    fontsize {12}
+    color #C0C0FF
+    width 0
+    border black
+    rad 25
+    canvas c1
 }
 
 canvas c1 {
