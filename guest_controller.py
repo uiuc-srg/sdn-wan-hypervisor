@@ -55,7 +55,6 @@ class SimpleSwitch(app_manager.RyuApp):
                 command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
                 priority=1000, table_id=0,
                 flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-            # TODO: Deal with failure
             datapath.send_msg(mod)
 
             match = parser.OFPMatch(eth_type=0x0800, ip_proto=6, ipv4_dst="10.0.0.16",
@@ -67,7 +66,6 @@ class SimpleSwitch(app_manager.RyuApp):
                 command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
                 priority=1000, table_id=0,
                 flags=ofproto.OFPFF_SEND_FLOW_REM, instructions=inst)
-            # TODO: Deal with failure
             datapath.send_msg(mod)
             print "ssh port change rule sent"
 

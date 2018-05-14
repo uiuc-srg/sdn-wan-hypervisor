@@ -36,7 +36,7 @@
     {"internal_addr": "10.0.0.22", "public_addr": "10.0.1.14", "privatenet": "10.0.0.0", "switch_port": 11,
       "mac_addr": "00:00:00:aa:00:25", "bridge_int": "eth0", "key_dir": "/home/yuen/Desktop/openvpenca/keys/",
       "eth_broadcast_addr": "10.0.0.255", "client_ip_pool_start": "10.0.0.50", "client_ip_pool_end": "10.0.0.100",
-       "client_ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
+      "client_ca_location": "/home/yuen/Desktop/openvpenca/keys/ca.crt",
       "client_cert_location": "/home/yuen/Desktop/openvpenca/keys/client1.crt",
       "client_key_location": "/home/yuen/Desktop/openvpenca/keys/client1.key",
       "client_dh_location": "/home/yuen/Desktop/openvpenca/keys/dh2048.pem",
